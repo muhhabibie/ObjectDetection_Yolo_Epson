@@ -1,0 +1,166 @@
+.reports {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filter-card .card-title {
+  margin-bottom: 14px;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.form-field label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gray-500);
+  margin-bottom: 4px;
+}
+
+.form-field input,
+.form-field select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--gray-700);
+  background: var(--white);
+  outline: none;
+}
+
+.form-field input:focus,
+.form-field select:focus {
+  border-color: var(--gray-400);
+}
+
+/* Summary */
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.summary-item {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  text-align: center;
+}
+
+.summary-val {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.summary-val--green { color: var(--green-600); }
+.summary-val--red { color: var(--red-500); }
+
+.summary-lbl {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  margin-top: 2px;
+}
+
+/* Export */
+.export-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.export-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--white);
+  width: 100%;
+  text-align: left;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+
+.export-btn:hover {
+  background: var(--gray-50);
+  border-color: var(--gray-300);
+}
+
+.export-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.export-icon--csv {
+  background: var(--green-50);
+  color: var(--green-600);
+}
+
+.export-icon--json {
+  background: var(--blue-50);
+  color: var(--blue-600);
+}
+
+.export-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.export-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.export-desc {
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  margin-top: 2px;
+}
+
+.export-dl {
+  color: var(--gray-400);
+  flex-shrink: 0;
+}
+
+.export-note {
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  margin-top: 12px;
+}
+
+.data-count {
+  font-size: 0.78rem;
+  color: var(--gray-400);
+}
+
+@media (max-width: 800px) {
+  .filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .report-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .export-grid {
+    grid-template-columns: 1fr;
+  }
+}

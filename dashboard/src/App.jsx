@@ -1,0 +1,47 @@
+import { useState } from 'react'
+import Sidebar from './components/Sidebar'
+import Topbar from './components/Topbar'
+import Dashboard from './pages/Dashboard'
+import History from './pages/History'
+import Reports from './pages/Reports'
+import './App.css'
+
+function App() {
+  const [activePage, setActivePage] = useState('dashboard')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const pages = {
+    dashboard: <Dashboard />,
+    history: <History />,
+    reports: <Reports />,
+  }
+
+  const titles = {
+    dashboard: { title: 'Dashboard', subtitle: 'Ringkasan performa verifikasi kuantitas part' },
+    history: { title: 'Riwayat Inspeksi', subtitle: 'Log seluruh hasil verifikasi' },
+    reports: { title: 'Laporan', subtitle: 'Export data inspeksi untuk klaim vendor' },
+  }
+
+  return (
+    <div className="app-layout">
+      <Sidebar
+        activePage={activePage}
+        onNavigate={(page) => { setActivePage(page); setSidebarOpen(false) }}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+      <main className="main-area">
+        <Topbar
+          title={titles[activePage]?.title}
+          subtitle={titles[activePage]?.subtitle}
+          onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+        />
+        <div className="page-container">
+          {pages[activePage]}
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export default App
