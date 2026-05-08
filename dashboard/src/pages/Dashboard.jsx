@@ -1,6 +1,6 @@
+import { useState, useEffect } from 'react'
 import { Eye, CheckCircle, TrendingDown, AlertTriangle } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { kpiData, accuracyTrend, resultDistribution, recentInspections, alerts } from '../data/mockData'
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import './Dashboard.css'
 
 function KpiCard({ label, value, icon: Icon, trend, color }) {
@@ -28,38 +28,85 @@ function StatusBadge({ status }) {
 }
 
 export default function Dashboard() {
+  const [kpi, setKpi] = useState({ total_inspections: 0, accuracy: 0, mae: 0, discrepancies: 0 })
+  const [recentInspections, setRecentInspections] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        // Fetch KPI Stats
+        const kpiRes = await fetch('http://localhost:8000/api/dashboard/stats')
+        const kpiData = await kpiRes.json()
+        setKpi(kpiData)
+
+        // Fetch Recent Inspections (limit 7)
+        const inspRes = await fetch('http://localhost:8000/api/inspections/?limit=7')
+        const inspData = await inspRes.json()
+        setRecentInspections(inspData)
+        
+        setLoading(false)
+      } catch (error) {
+        console.error("Gagal mengambil data dari API:", error)
+        setLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+    // Auto refresh tiap 5 detik
+    const interval = setInterval(fetchDashboardData, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  if (loading) {
+    return <div style={{ padding: '2rem' }}>Memuat data dari server...</div>
+  }
+
+  // Data untuk Pie Chart
+  const matches = kpi.total_inspections - kpi.discrepancies
+  const resultDistribution = [
+    { name: 'Sesuai', value: matches, color: '#10b981' },
+    { name: 'Tidak Sesuai', value: kpi.discrepancies, color: '#ef4444' }
+  ]
+
   return (
     <div className="dashboard">
       {/* KPI Row */}
       <section className="kpi-row">
-        <KpiCard label="Total Inspeksi" value={kpiData.totalInspections.toLocaleString()} icon={Eye} trend="+12.5% dari bulan lalu" color="blue" />
-        <KpiCard label="Akurasi Deteksi" value={`${kpiData.accuracy}%`} icon={CheckCircle} trend="Target ≥ 90% ✓" color="green" />
-        <KpiCard label="MAE" value={kpiData.mae} icon={TrendingDown} trend="Target ≤ 0.05 ✓" color="gray" />
-        <KpiCard label="Discrepancy" value={kpiData.discrepancies} icon={AlertTriangle} trend={`${((kpiData.discrepancies / kpiData.totalInspections) * 100).toFixed(1)}% dari total`} color="red" />
+        <KpiCard 
+          label="Total Inspeksi" 
+          value={kpi.total_inspections.toLocaleString()} 
+          icon={Eye} 
+          trend="Total part terdeteksi" 
+          color="blue" 
+        />
+        <KpiCard 
+          label="Akurasi Deteksi" 
+          value={`${kpi.accuracy}%`} 
+          icon={CheckCircle} 
+          trend="Berdasarkan selisih kuantitas" 
+          color="green" 
+        />
+        <KpiCard 
+          label="MAE" 
+          value={kpi.mae} 
+          icon={TrendingDown} 
+          trend="Rata-rata error (Mean Absolute Error)" 
+          color="gray" 
+        />
+        <KpiCard 
+          label="Discrepancy" 
+          value={kpi.discrepancies} 
+          icon={AlertTriangle} 
+          trend={`${kpi.total_inspections > 0 ? ((kpi.discrepancies / kpi.total_inspections) * 100).toFixed(1) : 0}% dari total`} 
+          color="red" 
+        />
       </section>
 
       {/* Charts */}
       <section className="charts-row">
-        <div className="card chart-card chart-card--wide">
-          <h3 className="card-title">Tren Akurasi</h3>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={accuracyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                <YAxis domain={[85, 100]} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
-                  formatter={(val) => [`${val}%`, 'Akurasi']}
-                />
-                <Line type="monotone" dataKey="accuracy" stroke="#111827" strokeWidth={2} dot={{ r: 3, fill: '#111827' }} activeDot={{ r: 5 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
         <div className="card chart-card">
-          <h3 className="card-title">Distribusi Hasil</h3>
+          <h3 className="card-title">Distribusi Hasil Inspeksi</h3>
           <div className="chart-wrap chart-wrap--pie">
             <ResponsiveContainer width="100%" height={180}>
               <PieChart>
@@ -76,9 +123,7 @@ export default function Dashboard() {
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{ border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
-                />
+                <Tooltip contentStyle={{ border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }} />
               </PieChart>
             </ResponsiveContainer>
             <div className="pie-legend">
@@ -94,9 +139,9 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Table + Alerts */}
+      {/* Table */}
       <section className="bottom-row">
-        <div className="card table-card">
+        <div className="card table-card" style={{ width: '100%' }}>
           <div className="card-header">
             <h3 className="card-title">Inspeksi Terbaru</h3>
           </div>
@@ -104,7 +149,8 @@ export default function Dashboard() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>ID</th>
+                  <th>No.</th>
+                  <th>ID Inspeksi</th>
                   <th>Waktu</th>
                   <th>Part</th>
                   <th>Expected</th>
@@ -114,37 +160,25 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {recentInspections.map((row) => (
+                {recentInspections.map((row, index) => (
                   <tr key={row.id}>
-                    <td className="td-mono">{row.id}</td>
-                    <td>{row.time}</td>
-                    <td>{row.part}</td>
-                    <td>{row.expected}</td>
-                    <td>{row.detected}</td>
-                    <td><StatusBadge status={row.status} /></td>
-                    <td>{row.confidence}%</td>
+                    <td style={{ color: '#6b7280' }}>{index + 1}</td>
+                    <td className="td-mono">{row.inspection_id}</td>
+                    <td>{new Date(row.created_at).toLocaleTimeString('id-ID')}</td>
+                    <td>{row.part_name}</td>
+                    <td>{row.expected_qty}</td>
+                    <td>{row.detected_qty}</td>
+                    <td><StatusBadge status={row.is_match ? 'match' : 'mismatch'} /></td>
+                    <td>{(row.average_confidence * 100).toFixed(1)}%</td>
                   </tr>
                 ))}
+                {recentInspections.length === 0 && (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '20px' }}>Belum ada data inspeksi</td>
+                  </tr>
+                )}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div className="card alerts-card">
-          <div className="card-header">
-            <h3 className="card-title">Notifikasi</h3>
-            <span className="alert-count">{alerts.length}</span>
-          </div>
-          <div className="alerts-list">
-            {alerts.map((a) => (
-              <div key={a.id} className={`alert-item alert-item--${a.level}`}>
-                <div className="alert-body">
-                  <p className="alert-title">{a.title}</p>
-                  <p className="alert-desc">{a.desc}</p>
-                </div>
-                <span className="alert-time">{a.time}</span>
-              </div>
-            ))}
           </div>
         </div>
       </section>
