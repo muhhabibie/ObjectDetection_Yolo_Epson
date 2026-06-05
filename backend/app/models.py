@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, DateTime, Boolean
+from sqlalchemy import UUID, Column, String, Integer, Float, DateTime, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -27,3 +27,16 @@ class Inspection(Base):
     
     # Waktu
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    username = Column(String(50), unique=True)
+    email = Column(String(255), unique=True)
+    password_hash = Column(Text)
+    role = Column(String(20), default="user")
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )

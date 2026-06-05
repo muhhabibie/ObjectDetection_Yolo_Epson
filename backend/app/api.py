@@ -7,8 +7,60 @@ from sqlalchemy import select, func
 from app.database import get_db
 from app.models import Inspection
 from app.schemas import InspectionCreate, InspectionResponse, DashboardStats
+from app.models import Inspection, User
+from app.schemas import (
+    InspectionCreate,
+    InspectionResponse,
+    DashboardStats,
+    LoginRequest
+)
+
+from app.utils.security import (
+    hash_password,
+    verify_password,
+    create_access_token
+)
 
 router = APIRouter(prefix="/api", tags=["inspections"])
+
+@router.post("/login")
+async def login(
+    credentials: LoginRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(User).where(
+            User.email == credentials.email
+        )
+    )
+
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+
+    if not verify_password(
+        credentials.password,
+        user.password_hash
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+
+    token = create_access_token({
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role
+    })
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 @router.post("/inspections/", response_model=InspectionResponse)
 async def create_inspection(

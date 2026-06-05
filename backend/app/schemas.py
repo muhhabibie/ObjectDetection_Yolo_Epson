@@ -2,6 +2,11 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
+from pydantic import BaseModel
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 class InspectionCreate(BaseModel):
     part_name: str

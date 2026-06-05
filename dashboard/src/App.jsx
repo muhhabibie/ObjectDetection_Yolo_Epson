@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Login from './pages/Login'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import Dashboard from './pages/Dashboard'
@@ -7,8 +8,24 @@ import Reports from './pages/Reports'
 import './App.css'
 
 function App() {
-  const [activePage, setActivePage] = useState('dashboard')
+  const [activePage, setActivePage] = useState(() => {
+    const p = window.location.pathname.replace(/\//g, '')
+    return p || 'dashboard'
+  })
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    // If user explicitly navigated to /login, show the login page even when a token exists
+    if (window.location.pathname === '/login') return false
+    return !!localStorage.getItem("token")
+  });
+
+  if (!isLoggedIn) {
+    return (
+      <Login
+        onLogin={() => setIsLoggedIn(true)}
+      />
+    );
+  }
 
   const pages = {
     dashboard: <Dashboard />,

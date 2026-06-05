@@ -23,7 +23,7 @@ app = FastAPI(
 # Konfigurasi CORS agar React (Vite) di localhost:5173/5174 bisa akses API ini
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Nanti bisa disesuaikan ke localhost:5173
+    allow_origins=["http://localhost:5173"],  # Nanti bisa disesuaikan ke localhost:5173
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
