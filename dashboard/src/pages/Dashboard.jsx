@@ -3,6 +3,8 @@ import { Eye, CheckCircle, TrendingDown, AlertTriangle } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import './Dashboard.css'
 
+const API_BASE = ""
+
 function KpiCard({ label, value, icon: Icon, trend, color }) {
   return (
     <div className="kpi-card">
@@ -36,12 +38,12 @@ export default function Dashboard() {
     const fetchDashboardData = async () => {
       try {
         // Fetch KPI Stats
-        const kpiRes = await fetch('http://localhost:8000/api/dashboard/stats')
+        const kpiRes = await fetch(`${API_BASE}/api/dashboard/stats`)
         const kpiData = await kpiRes.json()
         setKpi(kpiData)
 
         // Fetch Recent Inspections (limit 7)
-        const inspRes = await fetch('http://localhost:8000/api/inspections/?limit=7')
+        const inspRes = await fetch(`${API_BASE}/api/inspections/?limit=7`)
         const inspData = await inspRes.json()
         setRecentInspections(inspData)
         
@@ -164,7 +166,7 @@ export default function Dashboard() {
                   <tr key={row.id}>
                     <td style={{ color: '#6b7280' }}>{index + 1}</td>
                     <td className="td-mono">{row.inspection_id}</td>
-                    <td>{new Date(row.created_at).toLocaleTimeString('id-ID')}</td>
+                    <td>{new Date(row.created_at).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })}</td>
                     <td>{row.part_name}</td>
                     <td>{row.expected_qty}</td>
                     <td>{row.detected_qty}</td>

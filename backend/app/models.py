@@ -22,7 +22,8 @@ class Inspection(Base):
     average_confidence: Mapped[float] = mapped_column(Float)
     
     # Metadata Gambar
-    image_path: Mapped[str] = mapped_column(String(500), nullable=True)
+    image_path: Mapped[str] = mapped_column(String(500), nullable=True)         # gambar raw/asli
+    image_result_path: Mapped[str] = mapped_column(String(500), nullable=True)  # gambar hasil deteksi
     processing_time_sec: Mapped[float] = mapped_column(Float, nullable=True)
     
     # Waktu

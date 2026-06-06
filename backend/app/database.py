@@ -20,3 +20,23 @@ async def init_db():
     """Create all tables on startup."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Seed default user if none exists
+    import uuid
+    from sqlalchemy import select
+    from app.models import User
+    from app.utils.security import hash_password
+
+    async with async_session() as session:
+        result = await session.execute(select(User).limit(1))
+        if not result.scalar():
+            default_user = User(
+                id=uuid.uuid4(),
+                username="admin",
+                email="admin@epson.com",
+                password_hash=hash_password("admin123"),
+                role="admin"
+            )
+            session.add(default_user)
+            await session.commit()
+            print("Database initialized: seeded admin@epson.com / admin123")

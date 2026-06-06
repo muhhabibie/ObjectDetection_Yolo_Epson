@@ -15,6 +15,7 @@ class InspectionCreate(BaseModel):
     detected_qty: int
     average_confidence: float
     image_path: Optional[str] = None
+    image_result_path: Optional[str] = None
     processing_time_sec: Optional[float] = None
 
 
@@ -29,6 +30,7 @@ class InspectionResponse(BaseModel):
     is_match: bool
     average_confidence: float
     image_path: Optional[str]
+    image_result_path: Optional[str]
     processing_time_sec: Optional[float]
     created_at: datetime
 
@@ -40,3 +42,7 @@ class DashboardStats(BaseModel):
     accuracy: float
     mae: float
     discrepancies: int
+
+class ActiveSettingsUpdate(BaseModel):
+    part_name: str
+    expected_qty: int

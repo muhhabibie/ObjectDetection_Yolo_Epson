@@ -3,6 +3,7 @@ import Login from './pages/Login'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import Dashboard from './pages/Dashboard'
+import Capture from './pages/Capture'
 import History from './pages/History'
 import Reports from './pages/Reports'
 import './App.css'
@@ -29,14 +30,16 @@ function App() {
 
   const pages = {
     dashboard: <Dashboard />,
-    history: <History />,
-    reports: <Reports />,
+    capture:   <Capture />,
+    history:   <History />,
+    reports:   <Reports />,
   }
 
   const titles = {
-    dashboard: { title: 'Dashboard', subtitle: 'Ringkasan performa verifikasi kuantitas part' },
-    history: { title: 'Riwayat Inspeksi', subtitle: 'Log seluruh hasil verifikasi' },
-    reports: { title: 'Laporan', subtitle: 'Export data inspeksi untuk klaim vendor' },
+    dashboard: { title: 'Dashboard',        subtitle: 'Ringkasan performa verifikasi kuantitas part' },
+    capture:   { title: 'Capture',          subtitle: 'Ambil foto dari kamera HP & proses AI otomatis' },
+    history:   { title: 'Riwayat Inspeksi', subtitle: 'Log seluruh hasil verifikasi' },
+    reports:   { title: 'Laporan',          subtitle: 'Export data inspeksi untuk klaim vendor' },
   }
 
   return (

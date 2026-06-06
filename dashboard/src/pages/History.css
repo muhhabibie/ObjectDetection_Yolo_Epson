@@ -1,3 +1,4 @@
+/* ── Toolbar ─────────────────────────────────────────── */
 .history-toolbar {
   display: flex;
   justify-content: space-between;
@@ -65,6 +66,7 @@
   font-size: 0.82rem;
   font-weight: 500;
   transition: all 0.15s;
+  cursor: pointer;
 }
 
 .btn-export:hover {
@@ -72,15 +74,10 @@
   border-color: var(--gray-300);
 }
 
-.table-scroll {
-  overflow-x: auto;
-}
-
-.td-red {
-  color: var(--red-500);
-  font-weight: 600;
-}
-
+/* ── Table ───────────────────────────────────────────── */
+.table-scroll { overflow-x: auto; }
+.td-red  { color: var(--red-500); font-weight: 600; }
+.td-no-img { color: var(--gray-300); }
 .td-empty {
   text-align: center;
   padding: 40px 12px !important;
@@ -96,4 +93,229 @@
 .table-info {
   font-size: 0.78rem;
   color: var(--gray-400);
+}
+
+/* ── Tombol Lihat Gambar ─────────────────────────────── */
+.btn-view-img {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid #6366f1;
+  border-radius: 5px;
+  background: #eef2ff;
+  color: #6366f1;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-view-img:hover {
+  background: #6366f1;
+  color: white;
+}
+
+/* ── Modal Overlay ───────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Modal Box ───────────────────────────────────────── */
+.modal-box {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 1000px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+  animation: slideUp 0.25s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 4px;
+}
+
+.modal-subtitle {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.modal-close {
+  background: #f3f4f6;
+  border: none;
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  color: #6b7280;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.modal-close:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+/* ── Before / After Images ───────────────────────────── */
+.modal-images {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.modal-img-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-img-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 5px;
+  width: fit-content;
+}
+
+.modal-img-label--raw {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.modal-img-label--result {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.modal-img {
+  width: 100%;
+  border-radius: 10px;
+  object-fit: contain;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  max-height: 380px;
+}
+
+.modal-img-placeholder {
+  width: 100%;
+  height: 220px;
+  background: #f9fafb;
+  border: 2px dashed #e5e7eb;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+
+/* ── Info Row ────────────────────────────────────────── */
+.modal-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 24px 24px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.modal-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modal-info-label {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.modal-info-val {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.val--red   { color: #ef4444; }
+.val--green { color: #10b981; }
+
+@media (max-width: 640px) {
+  .modal-images {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Tombol Hapus ─────────────────────────────────── */
+.btn-delete-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid #ef4444;
+  border-radius: 5px;
+  background: #fef2f2;
+  color: #ef4444;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-delete-item:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-clear-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid #ef4444;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #ef4444;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+
+.btn-clear-all:hover {
+  background: #ef4444;
+  color: white;
 }

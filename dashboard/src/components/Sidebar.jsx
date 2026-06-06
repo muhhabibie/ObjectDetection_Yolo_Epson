@@ -1,10 +1,11 @@
-import { LayoutDashboard, ClockArrowUp, FileText, ScanEye } from 'lucide-react'
+import { LayoutDashboard, ClockArrowUp, FileText, Camera } from 'lucide-react'
 import './Sidebar.css'
 
 const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'history', label: 'Riwayat', icon: ClockArrowUp },
-  { id: 'reports', label: 'Laporan', icon: FileText },
+  { id: 'dashboard', label: 'Dashboard',  icon: LayoutDashboard },
+  { id: 'capture',   label: 'Capture',    icon: Camera },
+  { id: 'history',   label: 'Riwayat',    icon: ClockArrowUp },
+  { id: 'reports',   label: 'Laporan',    icon: FileText },
 ]
 
 export default function Sidebar({ activePage, onNavigate, open, onClose }) {
@@ -12,15 +13,7 @@ export default function Sidebar({ activePage, onNavigate, open, onClose }) {
     <>
       {open && <div className="sidebar-overlay" onClick={onClose} />}
       <aside className={`sidebar ${open ? 'sidebar--open' : ''}`}>
-        <div className="sidebar-brand">
-          <div className="sidebar-logo">
-            <ScanEye size={20} />
-          </div>
-          <div>
-            <div className="sidebar-title">EpsonQC</div>
-            <div className="sidebar-subtitle">Vision System</div>
-          </div>
-        </div>
+        <div style={{ paddingTop: '20px' }}></div>
 
         <nav className="sidebar-nav">
           <span className="nav-label">Menu</span>
@@ -38,9 +31,9 @@ export default function Sidebar({ activePage, onNavigate, open, onClose }) {
 
         <div className="sidebar-footer">
           <div className="user-chip">
-            <div className="user-avatar">MH</div>
+            <div className="user-avatar">AE</div>
             <div>
-              <div className="user-name">Muhammad Habibi</div>
+              <div className="user-name">Admin Epson</div>
               <div className="user-role">QC Operator</div>
             </div>
           </div>
