@@ -3,28 +3,75 @@ import uuid
 import time
 import random
 import cv2 as cv
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.database import get_db
-from app.models import Inspection, User
+from app.models import Inspection, User, AuditLog
 from app.schemas import (
     InspectionCreate,
     InspectionResponse,
     DashboardStats,
     LoginRequest,
-    ActiveSettingsUpdate
+    ActiveSettingsUpdate,
+    InspectionUpdate,
+    AuditLogResponse
 )
 from app.utils.security import (
     hash_password,
     verify_password,
-    create_access_token
+    create_access_token,
+    SECRET_KEY,
+    ALGORITHM
 )
 
 router = APIRouter(prefix="/api", tags=["inspections"])
+
+security_scheme = HTTPBearer()
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+    db: AsyncSession = Depends(get_db)
+):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        role = payload.get("role")
+        if user_id is None or role is None:
+            raise HTTPException(status_code=401, detail="Could not validate credentials")
+        
+        result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+async def log_activity(
+    db: AsyncSession,
+    user: User,
+    action: str,
+    details: str
+):
+    try:
+        log_entry = AuditLog(
+            user_id=user.id if user else None,
+            username=user.username if user else "system",
+            role=user.role if user else "system",
+            action=action,
+            details=details
+        )
+        db.add(log_entry)
+        await db.commit()
+    except Exception as e:
+        print(f"Error logging activity: {e}")
 
 
 ACTIVE_SETTINGS = {
@@ -34,24 +81,47 @@ ACTIVE_SETTINGS = {
 
 
 @router.get("/active-settings")
-def get_active_settings():
+async def get_active_settings(
+    current_user: User = Depends(get_current_user)
+):
     return ACTIVE_SETTINGS
 
 
 @router.post("/active-settings")
-def update_active_settings(settings: ActiveSettingsUpdate):
+async def update_active_settings(
+    settings: ActiveSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if current_user.role not in ["qc_epson", "storage_epson"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
     ACTIVE_SETTINGS["part_name"] = settings.part_name
     ACTIVE_SETTINGS["expected_qty"] = settings.expected_qty
+    
+    await log_activity(
+        db, 
+        current_user, 
+        "UPDATE_SETTINGS", 
+        f"Mengubah parameter active-settings ke: {settings.part_name} (target: {settings.expected_qty} gear)"
+    )
     return ACTIVE_SETTINGS
 
 
 @router.post("/scan-frame/")
-async def scan_frame(file: UploadFile = File(...)):
+async def scan_frame(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Endpoint ringan untuk auto-trigger kamera.
     Menerima frame dari HP, cek apakah ada gear — TANPA simpan ke DB.
     Dipakai oleh halaman Capture untuk polling deteksi otomatis.
     """
+    if current_user.role != "qc_epson":
+        raise HTTPException(status_code=403, detail="Permission denied")
+
     import numpy as np
     from app.vision_core import model, clahe
 
@@ -113,15 +183,26 @@ async def login(
         "role": user.role
     })
 
+    await log_activity(
+        db,
+        user,
+        "LOGIN",
+        f"Pengguna {user.username} berhasil login (Role: {user.role})"
+    )
+
     return {"access_token": token, "token_type": "bearer"}
 
 
 @router.post("/inspections/", response_model=InspectionResponse)
 async def create_inspection(
     inspection: InspectionCreate,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Endpoint untuk menyimpan hasil deteksi AI ke database."""
+    if current_user.role != "qc_epson":
+        raise HTTPException(status_code=403, detail="Permission denied")
+
     insp_id = f"INS-{random.randint(10000, 99999)}"
 
     db_insp = Inspection(
@@ -141,15 +222,32 @@ async def create_inspection(
     db.add(db_insp)
     await db.commit()
     await db.refresh(db_insp)
+
+    await log_activity(
+        db,
+        current_user,
+        "CREATE_INSPECTION",
+        f"Membuat inspeksi baru {insp_id} untuk part {inspection.part_name}"
+    )
+
     return db_insp
 
 
 @router.delete("/inspections/{id}")
-async def delete_single_inspection(id: int, db: AsyncSession = Depends(get_db)):
+async def delete_single_inspection(
+    id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if current_user.role != "qc_epson":
+        raise HTTPException(status_code=403, detail="Permission denied")
+
     result = await db.execute(select(Inspection).where(Inspection.id == id))
     db_insp = result.scalar_one_or_none()
     if not db_insp:
         raise HTTPException(status_code=404, detail="Inspection not found")
+
+    insp_id = db_insp.inspection_id
 
     try:
         if db_insp.image_path:
@@ -167,13 +265,28 @@ async def delete_single_inspection(id: int, db: AsyncSession = Depends(get_db)):
 
     await db.delete(db_insp)
     await db.commit()
+
+    await log_activity(
+        db,
+        current_user,
+        "DELETE_INSPECTION",
+        f"Menghapus riwayat inspeksi {insp_id}"
+    )
+
     return {"message": f"Successfully deleted inspection {id}"}
 
 
 @router.delete("/inspections/")
-async def delete_all_inspections(db: AsyncSession = Depends(get_db)):
+async def delete_all_inspections(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if current_user.role != "qc_epson":
+        raise HTTPException(status_code=403, detail="Permission denied")
+
     result = await db.execute(select(Inspection))
     inspections = result.scalars().all()
+    count = len(inspections)
     
     for db_insp in inspections:
         try:
@@ -193,6 +306,14 @@ async def delete_all_inspections(db: AsyncSession = Depends(get_db)):
     from sqlalchemy import delete
     await db.execute(delete(Inspection))
     await db.commit()
+
+    await log_activity(
+        db,
+        current_user,
+        "CLEAR_HISTORY",
+        f"Menghapus seluruh riwayat inspeksi ({count} data terhapus)"
+    )
+
     return {"message": "Successfully cleared all inspection history"}
 
 
@@ -200,6 +321,7 @@ async def delete_all_inspections(db: AsyncSession = Depends(get_db)):
 async def get_all_inspections(
     skip: int = 0,
     limit: int = 100,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Endpoint untuk mengambil semua data riwayat inspeksi."""
@@ -213,9 +335,11 @@ async def get_all_inspections(
 
 
 @router.get("/dashboard/stats", response_model=DashboardStats)
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
+async def get_dashboard_stats(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """Menghitung KPI Dashboard dari DB PostgreSQL"""
-
     total_result = await db.execute(select(func.count(Inspection.id)))
     total = total_result.scalar() or 0
 
@@ -248,21 +372,16 @@ async def upload_camera_image(
     part_name: str = Form(...),
     expected_qty: int = Form(...),
     batch_id: str = Form(None),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Endpoint utama — menerima gambar dari kamera, memproses dengan AI,
     menyimpan dua gambar (raw + hasil deteksi), dan mencatat ke database.
-
-    Alur:
-    1. Terima gambar dari kamera
-    2. Simpan gambar RAW
-    3. Proses dengan CLAHE + YOLOv8
-    4. Simpan gambar RESULT (dengan bounding box)
-    5. Simpan rekaman ke database
-    6. Return data inspeksi lengkap
     """
-    # Import di sini untuk menghindari load model saat startup jika tidak diperlukan
+    if current_user.role != "qc_epson":
+        raise HTTPException(status_code=403, detail="Permission denied")
+
     from app.vision_core import proses_inspeksi_gambar
 
     # 1. Baca konten file dari kamera
@@ -303,7 +422,7 @@ async def upload_camera_image(
         detected_qty=detected_qty,
         discrepancy=detected_qty - expected_qty,
         is_match=detected_qty == expected_qty,
-        average_confidence=round(avg_confidence / 100, 4),  # simpan dalam 0-1
+        average_confidence=round(avg_confidence / 100, 4),
         image_path=image_path,
         image_result_path=image_result_path,
         processing_time_sec=processing_time
@@ -312,4 +431,75 @@ async def upload_camera_image(
     db.add(db_insp)
     await db.commit()
     await db.refresh(db_insp)
+
+    await log_activity(
+        db,
+        current_user,
+        "CAPTURE_IMAGE",
+        f"Berhasil mendeteksi {detected_qty} gear pada part {part_name} (ID: {insp_id})"
+    )
+
     return db_insp
+
+
+@router.put("/inspections/{id}", response_model=InspectionResponse)
+async def update_inspection(
+    id: int,
+    inspection_update: InspectionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if current_user.role not in ["qc_epson", "storage_epson"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    result = await db.execute(select(Inspection).where(Inspection.id == id))
+    db_insp = result.scalar_one_or_none()
+    if not db_insp:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+
+    changes = []
+    if inspection_update.part_name is not None:
+        old_val = db_insp.part_name
+        db_insp.part_name = inspection_update.part_name
+        changes.append(f"Nama Part ({old_val} -> {inspection_update.part_name})")
+        
+    if inspection_update.expected_qty is not None:
+        old_val = db_insp.expected_qty
+        db_insp.expected_qty = inspection_update.expected_qty
+        db_insp.discrepancy = db_insp.detected_qty - db_insp.expected_qty
+        db_insp.is_match = db_insp.detected_qty == db_insp.expected_qty
+        changes.append(f"Target Qty ({old_val} -> {inspection_update.expected_qty})")
+        
+    if inspection_update.batch_id is not None:
+        old_val = db_insp.batch_id
+        db_insp.batch_id = inspection_update.batch_id
+        changes.append(f"Batch ID ({old_val} -> {inspection_update.batch_id})")
+
+    if changes:
+        db.add(db_insp)
+        await db.commit()
+        await db.refresh(db_insp)
+        await log_activity(
+            db,
+            current_user,
+            "EDIT_INSPECTION",
+            f"Mengedit data inspeksi {db_insp.inspection_id}: {', '.join(changes)}"
+        )
+    return db_insp
+
+
+@router.get("/audit-logs", response_model=List[AuditLogResponse])
+async def get_audit_logs(
+    limit: int = 100,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if current_user.role not in ["qc_epson", "storage_epson"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    result = await db.execute(
+        select(AuditLog)
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+    )
+    return result.scalars().all()

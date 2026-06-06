@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Download, Search, X, ZoomIn, Trash2 } from 'lucide-react'
+import { Download, Search, X, ZoomIn, Trash2, Edit } from 'lucide-react'
 import './History.css'
 
 const API_BASE = ""
@@ -172,14 +172,139 @@ function ImageModal({ inspection, onClose, onZoomImage }) {
   )
 }
 
+// ─── Modal Edit Inspeksi (Khusus QC & Storage) ─────────────────────────────
+function EditInspectionModal({ inspection, onClose, onSave }) {
+  const [partName, setPartName] = useState('')
+  const [expectedQty, setExpectedQty] = useState(12)
+  const [batchId, setBatchId] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (inspection) {
+      setPartName(inspection.part_name || '')
+      setExpectedQty(inspection.expected_qty || 12)
+      setBatchId(inspection.batch_id || '')
+    }
+  }, [inspection])
+
+  if (!inspection) return null
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await onSave(inspection.id, {
+        part_name: partName,
+        expected_qty: Number(expectedQty),
+        batch_id: batchId || null
+      })
+      onClose()
+    } catch (err) {
+      alert("Gagal mengupdate data")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 999 }}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+        <div className="modal-header">
+          <h2 className="modal-title">Edit Data Inspeksi</h2>
+          <button className="modal-close" onClick={onClose}><X size={20} /></button>
+        </div>
+        
+        <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>Nama Part</label>
+            <input 
+              type="text" 
+              value={partName} 
+              onChange={e => setPartName(e.target.value)} 
+              required
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '0.9rem'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>Target Qty (Expected)</label>
+            <input 
+              type="number" 
+              value={expectedQty} 
+              onChange={e => setExpectedQty(e.target.value)} 
+              required
+              min={1}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '0.9rem'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>Batch ID</label>
+            <input 
+              type="text" 
+              value={batchId} 
+              onChange={e => setBatchId(e.target.value)} 
+              placeholder="Tidak ada batch"
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '0.9rem'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button 
+              type="button" 
+              onClick={onClose}
+              disabled={loading}
+              style={{ 
+                flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', 
+                background: '#f8fafc', color: '#475569', fontWeight: 600, cursor: 'pointer' 
+              }}
+            >
+              Batal
+            </button>
+            <button 
+              type="submit" 
+              disabled={loading}
+              style={{ 
+                flex: 1, padding: '10px', borderRadius: '8px', border: 'none', 
+                background: '#3b82f6', color: '#fff', fontWeight: 600, cursor: 'pointer' 
+              }}
+            >
+              {loading ? "Menyimpan..." : "Simpan"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Halaman History ────────────────────────────────────────────────────────
-export default function History() {
+export default function History({ user }) {
   const [inspections, setInspections] = useState([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [selectedInspection, setSelectedInspection] = useState(null)
+  const [editingInspection, setEditingInspection] = useState(null)
   const [zoomedImage, setZoomedImage] = useState(null)
+
+  const canEdit = user?.role === 'qc_epson' || user?.role === 'storage_epson'
+  const canDelete = user?.role === 'qc_epson'
 
   const handleDeleteInspection = async (id) => {
     if (!window.confirm("Apakah Anda yakin ingin menghapus data inspeksi ini?")) return
@@ -211,12 +336,33 @@ export default function History() {
     }
   }
 
+  const handleSaveInspection = async (id, updatedData) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/inspections/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedData)
+      })
+      if (res.ok) {
+        const updatedObj = await res.json()
+        setInspections(prev => prev.map(insp => insp.id === id ? updatedObj : insp))
+      } else {
+        alert("Gagal memperbarui data")
+      }
+    } catch (err) {
+      console.error(err)
+      alert("Error saat menyimpan perubahan")
+    }
+  }
+
   useEffect(() => {
     const fetchHistory = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/inspections/`)
-        const data = await res.json()
-        setInspections(data)
+        if (res.ok) {
+          const data = await res.json()
+          setInspections(data)
+        }
         setLoading(false)
       } catch (error) {
         console.error("Gagal mengambil data dari API:", error)
@@ -240,14 +386,23 @@ export default function History() {
   })
 
   const exportCSV = () => {
-    const header = 'ID Inspeksi;Waktu;Nama Part;Expected;Detected;Selisih;Status;Confidence;Link Foto Asli;Link Foto Deteksi\n'
-    const rows = filtered.map(r => {
+    const header = 'NO.;ID INSPEKSI;WAKTU;NAMA PART;BATCH ID;TARGET (EXPECTED);TERDETEKSI (DETECTED);SELISIH;STATUS;CONFIDENCE AI;FOTO ASLI;FOTO DETEKSI\n'
+    const rows = filtered.map((r, index) => {
       const timeStr = new Date(r.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
       const statusStr = r.is_match ? 'Sesuai' : 'Selisih'
-      const rawPhotoLink = r.image_path ? `=HYPERLINK("http://${window.location.hostname}:8000${r.image_path}")` : ''
-      const resultPhotoLink = r.image_result_path ? `=HYPERLINK("http://${window.location.hostname}:8000${r.image_result_path}")` : ''
+      const confidenceStr = (r.average_confidence * 100).toFixed(1) + '%'
+      
+      const batchIdStr = r.batch_id ? r.batch_id.replace(/"/g, '""') : '—'
       const partNameEscaped = r.part_name.replace(/"/g, '""')
-      return `"${r.inspection_id}";"${timeStr}";"${partNameEscaped}";${r.expected_qty};${r.detected_qty};${r.discrepancy};"${statusStr}";"${(r.average_confidence * 100).toFixed(1)}%";${rawPhotoLink};${resultPhotoLink}`
+      
+      const rawLink = r.image_path 
+        ? `=HYPERLINK(""http://${window.location.hostname}:8000${r.image_path}"";""Buka Foto Asli"")` 
+        : '—'
+      const resLink = r.image_result_path 
+        ? `=HYPERLINK(""http://${window.location.hostname}:8000${r.image_result_path}"";""Buka Foto Deteksi"")` 
+        : '—'
+
+      return `"${index + 1}";"${r.inspection_id}";"${timeStr}";"${partNameEscaped}";"${batchIdStr}";${r.expected_qty};${r.detected_qty};${r.discrepancy > 0 ? '+' : ''}${r.discrepancy};"${statusStr}";"${confidenceStr}";"${rawLink}";"${resLink}"`
     }).join('\n')
 
     const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' })
@@ -265,11 +420,18 @@ export default function History() {
 
   return (
     <div className="history">
-      {/* Modal gambar */}
+      {/* Modal detail gambar */}
       <ImageModal
         inspection={selectedInspection}
         onClose={() => setSelectedInspection(null)}
         onZoomImage={setZoomedImage}
+      />
+
+      {/* Modal edit data */}
+      <EditInspectionModal
+        inspection={editingInspection}
+        onClose={() => setEditingInspection(null)}
+        onSave={handleSaveInspection}
       />
 
       <div className="card">
@@ -293,10 +455,12 @@ export default function History() {
               <Download size={14} />
               Export CSV
             </button>
-            <button className="btn-clear-all" onClick={handleClearAll}>
-              <Trash2 size={14} />
-              Hapus Semua
-            </button>
+            {canDelete && (
+              <button className="btn-clear-all" onClick={handleClearAll}>
+                <Trash2 size={14} />
+                Hapus Semua
+              </button>
+            )}
           </div>
         </div>
 
@@ -348,14 +512,29 @@ export default function History() {
                       ) : (
                         <span className="td-no-img">—</span>
                       )}
-                      <button
-                        className="btn-delete-item"
-                        onClick={() => handleDeleteInspection(row.id)}
-                        title="Hapus riwayat"
-                      >
-                        <Trash2 size={14} />
-                        Hapus
-                      </button>
+                      
+                      {canEdit && (
+                        <button
+                          className="btn-view-img"
+                          style={{ borderColor: '#e2e8f0', color: '#475569' }}
+                          onClick={() => setEditingInspection(row)}
+                          title="Edit data"
+                        >
+                          <Edit size={14} />
+                          Edit
+                        </button>
+                      )}
+
+                      {canDelete && (
+                        <button
+                          className="btn-delete-item"
+                          onClick={() => handleDeleteInspection(row.id)}
+                          title="Hapus riwayat"
+                        >
+                          <Trash2 size={14} />
+                          Hapus
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

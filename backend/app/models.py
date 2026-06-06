@@ -41,3 +41,14 @@ class User(Base):
         DateTime,
         default=datetime.utcnow
     )
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id = Column(UUID(as_uuid=True), nullable=True)
+    username = Column(String(50), nullable=True)
+    role = Column(String(20), nullable=True)
+    action = Column(String(50), index=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

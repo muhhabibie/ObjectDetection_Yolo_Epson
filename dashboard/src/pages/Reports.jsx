@@ -52,14 +52,23 @@ export default function Reports() {
   const mismatchCount = filtered.filter(r => !r.is_match).length
 
   const exportCSV = () => {
-    const header = 'ID Inspeksi;Waktu;Nama Part;Expected;Detected;Selisih;Status;Confidence;Link Foto Asli;Link Foto Deteksi\n'
-    const rows = filtered.map(r => {
+    const header = 'NO.;ID INSPEKSI;WAKTU;NAMA PART;BATCH ID;TARGET (EXPECTED);TERDETEKSI (DETECTED);SELISIH;STATUS;CONFIDENCE AI;FOTO ASLI;FOTO DETEKSI\n'
+    const rows = filtered.map((r, index) => {
       const timeStr = new Date(r.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
       const statusStr = r.is_match ? 'Sesuai' : 'Selisih'
-      const rawPhotoLink = r.image_path ? `=HYPERLINK("http://${window.location.hostname}:8000${r.image_path}")` : ''
-      const resultPhotoLink = r.image_result_path ? `=HYPERLINK("http://${window.location.hostname}:8000${r.image_result_path}")` : ''
+      const confidenceStr = (r.average_confidence * 100).toFixed(1) + '%'
+      
+      const batchIdStr = r.batch_id ? r.batch_id.replace(/"/g, '""') : '—'
       const partNameEscaped = r.part_name.replace(/"/g, '""')
-      return `"${r.inspection_id}";"${timeStr}";"${partNameEscaped}";${r.expected_qty};${r.detected_qty};${r.discrepancy};"${statusStr}";"${(r.average_confidence * 100).toFixed(1)}%";${rawPhotoLink};${resultPhotoLink}`
+      
+      const rawLink = r.image_path 
+        ? `=HYPERLINK(""http://${window.location.hostname}:8000${r.image_path}"";""Buka Foto Asli"")` 
+        : '—'
+      const resLink = r.image_result_path 
+        ? `=HYPERLINK(""http://${window.location.hostname}:8000${r.image_result_path}"";""Buka Foto Deteksi"")` 
+        : '—'
+
+      return `"${index + 1}";"${r.inspection_id}";"${timeStr}";"${partNameEscaped}";"${batchIdStr}";${r.expected_qty};${r.detected_qty};${r.discrepancy > 0 ? '+' : ''}${r.discrepancy};"${statusStr}";"${confidenceStr}";"${rawLink}";"${resLink}"`
     }).join('\n')
     
     const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' })

@@ -1,0 +1,75 @@
+/* ── Audit Logs Badges ─────────────────────────────── */
+
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.role-badge--qc_epson {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+
+.role-badge--storage_epson {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+}
+
+.role-badge--vendor {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.log-action-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.log-action--login {
+  background-color: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.log-action--capture {
+  background-color: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.log-action--settings {
+  background-color: #faf5ff;
+  color: #6b21a8;
+  border: 1px solid #e9d5ff;
+}
+
+.log-action--edit {
+  background-color: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fef3c7;
+}
+
+.log-action--delete {
+  background-color: #fff5f5;
+  color: #c53030;
+  border: 1px solid #fed7d7;
+}
+
+.log-action--clear {
+  background-color: #fef2f2;
+  color: #9b1c1c;
+  border: 1px solid #fee2e2;
+}
+
+.log-action--default {
+  background-color: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}

@@ -21,22 +21,32 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Seed default user if none exists
+    # Seed default users if they don't exist
     import uuid
     from sqlalchemy import select
     from app.models import User
     from app.utils.security import hash_password
 
     async with async_session() as session:
-        result = await session.execute(select(User).limit(1))
-        if not result.scalar():
-            default_user = User(
-                id=uuid.uuid4(),
-                username="admin",
-                email="admin@epson.com",
-                password_hash=hash_password("admin123"),
-                role="admin"
-            )
-            session.add(default_user)
-            await session.commit()
-            print("Database initialized: seeded admin@epson.com / admin123")
+        default_users = [
+            {"username": "qcepson", "email": "qcepson@epson.com", "pass": "qcepson123", "role": "qc_epson"},
+            {"username": "storageepson", "email": "storageepson@epson.com", "pass": "storageepson123", "role": "storage_epson"},
+            {"username": "vendor", "email": "vendor@epson.com", "pass": "vendor123", "role": "vendor"},
+            {"username": "admin", "email": "admin@epson.com", "pass": "admin123", "role": "qc_epson"}
+        ]
+        
+        for u in default_users:
+            res = await session.execute(select(User).where(User.username == u["username"]))
+            if not res.scalar():
+                new_user = User(
+                    id=uuid.uuid4(),
+                    username=u["username"],
+                    email=u["email"],
+                    password_hash=hash_password(u["pass"]),
+                    role=u["role"]
+                )
+                session.add(new_user)
+                print(f"Seeding user: {u['username']} ({u['role']})")
+                
+        await session.commit()
+        print("Database user seeding check completed.")

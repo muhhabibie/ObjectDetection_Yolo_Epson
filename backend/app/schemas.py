@@ -46,3 +46,19 @@ class DashboardStats(BaseModel):
 class ActiveSettingsUpdate(BaseModel):
     part_name: str
     expected_qty: int
+
+class InspectionUpdate(BaseModel):
+    part_name: Optional[str] = None
+    expected_qty: Optional[int] = None
+    batch_id: Optional[str] = None
+
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: Optional[str] = None
+    username: Optional[str] = None
+    role: Optional[str] = None
+    action: str
+    details: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

@@ -90,7 +90,8 @@ function ZoomedImageModal({ image, onClose }) {
   )
 }
 
-export default function Capture() {
+export default function Capture({ user }) {
+  const isStorage = user?.role === 'storage_epson'
   const videoRef    = useRef(null)
   const canvasRef   = useRef(null)
   const streamRef   = useRef(null)
@@ -539,285 +540,304 @@ export default function Capture() {
 
         {/* ── Panel Utama (Kiri) ────────────────────────── */}
         <div className="capture-left-col">
-          <div className="capture-modes-tabs">
-            <button
-              className={`tab-btn ${activeTab === 'camera' ? 'active' : ''}`}
-              onClick={() => handleTabChange('camera')}
-            >
-              <Camera size={16} /> Mode Kamera
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'upload' ? 'active' : ''}`}
-              onClick={() => handleTabChange('upload')}
-            >
-              <Upload size={16} /> Unggah Foto
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'watcher' ? 'active' : ''}`}
-              onClick={() => handleTabChange('watcher')}
-            >
-              <FolderOpen size={16} /> Folder Watcher
-            </button>
-          </div>
-
-          {activeTab === 'camera' ? (
-            (!isMobile && !forceDesktopLocal) ? (
-              <div className="desktop-guide-panel">
-                <div className="guide-header">
-                  <Smartphone className="guide-phone-icon" size={32} />
-                  <div>
-                    <h2 className="guide-title">Gunakan HP Sebagai Kamera Pemotretan</h2>
-                    <p className="guide-subtitle">Hubungkan kamera HP Anda untuk melakukan pemindaian AI secara dinamis.</p>
-                  </div>
+          {isStorage ? (
+            <div className="watcher-panel">
+              <div className="watcher-card">
+                <div className="watcher-icon-wrap" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Settings size={48} />
                 </div>
-
-                <div className="guide-steps-grid">
-                  {/* Opsi 1: WiFi */}
-                  <div className="guide-step-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    <div className="guide-badge-row">
-                      <span className="guide-step-num">Opsi 1</span>
-                      <Wifi size={18} className="guide-step-icon" />
-                    </div>
-                    <h4 className="guide-step-title">Koneksi Via Wi-Fi (Nirkabel)</h4>
-                    <ol className="guide-step-list" style={{ flexGrow: 1 }}>
-                      <li>Sambungkan HP Anda ke Wi-Fi yang sama dengan Laptop ini.</li>
-                      <li>Pindai <b>QR Code</b> di bawah ini menggunakan kamera HP Anda:</li>
-                    </ol>
-                    <div className="guide-url-box" style={{ fontSize: '0.78rem', wordBreak: 'break-all', margin: '8px 0' }}>
-                      {wifiURL}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px' }}>
-                      <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(wifiURL)}`}
-                        alt="QR Code Wi-Fi"
-                        style={{ border: '4px solid #fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '130px', height: '130px' }}
-                      />
-                      <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '4px', fontWeight: '500' }}>Pindai untuk membuka (Wi-Fi)</span>
-                    </div>
-                  </div>
-
-                  {/* Opsi 2: Kabel USB */}
-                  <div className="guide-step-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    <div className="guide-badge-row">
-                      <span className="guide-step-num">Opsi 2</span>
-                      <Usb size={18} className="guide-step-icon" />
-                    </div>
-                    <h4 className="guide-step-title">Koneksi Via Kabel USB</h4>
-                    
-                    {usbIP ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
-                        <ol className="guide-step-list" style={{ flexGrow: 1 }}>
-                          <li style={{ color: '#16a34a', fontWeight: '600' }}>✓ Sambungan USB Terdeteksi!</li>
-                          <li>Pindai <b>QR Code USB</b> di bawah ini untuk membuka kamera:</li>
-                        </ol>
-                        <div className="guide-url-box" style={{ fontSize: '0.78rem', wordBreak: 'break-all', margin: '8px 0', borderLeftColor: '#10b981' }}>
-                          {usbURL}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px' }}>
-                          <img 
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(usbURL)}`}
-                            alt="QR Code USB"
-                            style={{ border: '4px solid #fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '130px', height: '130px' }}
-                          />
-                          <span style={{ fontSize: '0.7rem', color: '#16a34a', marginTop: '4px', fontWeight: '600' }}>Pindai untuk membuka (Kabel USB)</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', flexGrow: 1, padding: '10px 0', textAlign: 'center', width: '100%' }}>
-                        <ol className="guide-step-list" style={{ textAlign: 'left', width: '100%', marginBottom: '12px' }}>
-                          <li>Hubungkan HP ke Laptop dengan kabel USB.</li>
-                          <li>Buka Pengaturan HP → Aktifkan <b>USB Tethering (Penambatan USB)</b>.</li>
-                        </ol>
-                        <div style={{ padding: '16px', background: '#f8fafc', border: '1px dashed #e2e8f0', borderRadius: '8px', width: '100%' }}>
-                          <Loader className="guide-step-icon" size={20} style={{ animation: 'spin 2s linear infinite', color: '#64748b', margin: '0 auto 8px' }} />
-                          <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '500' }}>Menunggu kabel USB terhubung & tethering aktif...</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="guide-footer-info">
-                  <div className="live-status-container">
-                    <div className="live-status-dot" />
-                    <span className="live-status-text">Menunggu pemotretan dari HP... (Layar PC terintegrasi real-time)</span>
-                  </div>
-                  <button className="btn-force-local" onClick={() => setForceDesktopLocal(true)}>
-                    Buka Kamera Lokal Webcam PC
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="camera-panel">
-                <div className={`camera-viewport ${status === 'detected' ? 'viewport--detected' : ''} ${status === 'processing' ? 'viewport--processing' : ''}`}>
-                  <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
-                  <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-                  {/* Overlay status */}
-                  <div className={`cam-overlay cam-overlay--${s.color}`}>
-                    <div className="cam-status-dot" />
-                    <span>{s.label}</span>
-                    {status === 'cooldown' && <span className="cam-cooldown">{cooldownSec}s</span>}
-                  </div>
-
-                  {/* Scan result badge */}
-                  {scanResult && status !== 'idle' && (
-                    <div className="cam-badge">
-                      <span>Gear: {scanResult.count}</span>
-                      <span className="badge-sep">|</span>
-                      <span>Conf: {scanResult.confidence}%</span>
-                    </div>
-                  )}
-
-                  {/* Frame guide */}
-                  <div className="cam-frame-guide">
-                    <div className="frame-corner frame-corner--tl" />
-                    <div className="frame-corner frame-corner--tr" />
-                    <div className="frame-corner frame-corner--bl" />
-                    <div className="frame-corner frame-corner--br" />
-                  </div>
-
-                  {!cameraOn && (
-                    <div className="cam-off-screen">
-                      <Camera size={48} strokeWidth={1} />
-                      <p>Kamera belum aktif</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Tombol kamera */}
-                <div className="cam-controls">
-                  {!cameraOn ? (
-                    <button className="btn-cam btn-cam--start" onClick={startCamera}>
-                      <Camera size={18} /> Aktifkan Kamera HP
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        className={`btn-cam ${autoMode ? 'btn-cam--stop-auto' : 'btn-cam--auto'}`}
-                        onClick={() => setAutoMode(!autoMode)}
-                      >
-                        {autoMode ? <><ZapOff size={18}/> Stop Auto</> : <><Zap size={18}/> Auto Capture</>}
-                      </button>
-                      <button
-                        className="btn-cam btn-cam--manual"
-                        onClick={processFullCapture}
-                        disabled={status === 'processing' || status === 'cooldown'}
-                      >
-                        <Camera size={18} /> Foto Manual
-                      </button>
-                      <button className="btn-cam btn-cam--off" onClick={stopCamera}>
-                        Matikan
-                      </button>
-                    </>
-                  )}
-                  {forceDesktopLocal && (
-                    <button className="btn-cam btn-cam--off" style={{ flex: 'none', width: 'auto' }} onClick={() => setForceDesktopLocal(false)}>
-                      Kembali ke Panduan HP
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          ) : activeTab === 'upload' ? (
-            <div className="upload-panel">
-              <div
-                className={`camera-viewport ${status === 'processing' ? 'viewport--processing' : ''} ${status === 'detected' ? 'viewport--detected' : ''} ${dragActive ? 'viewport--drag' : ''}`}
-                onDragEnter={handleDrag}
-                onDragOver={handleDrag}
-                onDragLeave={handleDrag}
-                onDrop={handleDrop}
-              >
-                {uploadPreview ? (
-                  <img src={uploadPreview} alt="Preview" className="camera-video upload-preview-img" style={{ objectFit: 'contain' }} />
-                ) : (
-                  <label htmlFor="file-upload-input" className="upload-drop-zone">
-                    <Upload size={48} strokeWidth={1} className="upload-icon" />
-                    <p className="upload-text-main">Tarik & lepas gambar di sini atau <span>klik untuk memilih</span></p>
-                    <p className="upload-text-sub">Mendukung format JPEG, JPG, PNG</p>
-                  </label>
-                )}
-
-                <input
-                  id="file-upload-input"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  style={{ display: 'none' }}
-                />
-
-                {/* Overlay status */}
-                <div className={`cam-overlay cam-overlay--${s.color}`}>
-                  <div className="cam-status-dot" />
-                  <span>{s.label}</span>
-                  {status === 'cooldown' && <span className="cam-cooldown">{cooldownSec}s</span>}
-                </div>
-
-                {/* Frame guide corners */}
-                {!uploadPreview && (
-                  <div className="cam-frame-guide">
-                    <div className="frame-corner frame-corner--tl" />
-                    <div className="frame-corner frame-corner--tr" />
-                    <div className="frame-corner frame-corner--bl" />
-                    <div className="frame-corner frame-corner--br" />
-                  </div>
-                )}
-              </div>
-
-              {/* Tombol kontrol upload */}
-              <div className="cam-controls">
-                {uploadPreview ? (
-                  <>
-                    <button
-                      className="btn-cam btn-cam--manual"
-                      onClick={processUploadedFile}
-                      disabled={status === 'processing' || status === 'cooldown'}
-                    >
-                      <CheckCircle size={18} /> Analisis Foto
-                    </button>
-                    <button
-                      className="btn-cam btn-cam--off"
-                      onClick={clearUploadedFile}
-                      disabled={status === 'processing'}
-                    >
-                      <Trash2 size={18} /> Hapus / Ganti
-                    </button>
-                  </>
-                ) : (
-                  <label htmlFor="file-upload-input" className="btn-cam btn-cam--start" style={{ cursor: 'pointer', textAlign: 'center' }}>
-                    <Upload size={18} /> Pilih File Gambar
-                  </label>
-                )}
+                <h3 className="watcher-title">Manajemen Parameter Aktif</h3>
+                <p className="watcher-desc">
+                  Sebagai role <strong>Storage Epson</strong>, Anda diizinkan untuk mengubah nama part dan jumlah expected untuk disinkronisasikan ke sistem deteksi otomatis.
+                </p>
+                <p className="watcher-desc" style={{ marginTop: '10px', color: '#64748b' }}>
+                  Fitur pemindaian kamera langsung dan upload file dinonaktifkan untuk role Anda dan hanya dapat diakses oleh QC Epson.
+                </p>
               </div>
             </div>
           ) : (
-            <div className="watcher-panel">
-              <div className="watcher-card">
-                <div className="watcher-icon-wrap">
-                  <FolderOpen size={48} className="watcher-large-icon" />
-                </div>
-                <h3 className="watcher-title">Folder Watcher Aktif</h3>
-                <p className="watcher-desc">
-                  Ambil foto menggunakan kamera bawaan HP Anda dan sinkronisasikan ke folder lokal PC untuk memproses AI secara otomatis tanpa perlu membuka dashboard di HP.
-                </p>
-
-                <div className="watcher-path-box">
-                  <span className="path-label">Folder Pemantauan:</span>
-                  <div className="path-value">capstone/watch_folder</div>
-                  <span className="path-hint">Silakan letakkan atau sinkronisasikan foto (.jpg, .png) di sini</span>
-                </div>
-
-                <div className="watcher-steps">
-                  <h4>Langkah Penyiapan:</h4>
-                  <ol>
-                    <li>Hubungkan HP Anda ke PC/Laptop (bisa menggunakan kabel USB atau Wi-Fi).</li>
-                    <li>Gunakan software sinkronisasi foto otomatis (misal: <b>Link to Windows</b> bawaan Microsoft, <b>Google Drive</b> Desktop, <b>OneDrive</b>, atau <b>Intel Unison</b>).</li>
-                    <li>Atur software tersebut agar menyinkronkan foto dari kamera HP Anda ke folder <code>capstone/watch_folder</code> di laptop ini.</li>
-                    <li>Ambil foto roda gigi dengan kamera biasa di HP Anda. Hasil deteksi AI akan otomatis muncul di panel sebelah kanan dalam 2 detik!</li>
-                  </ol>
-                </div>
+            <>
+              <div className="capture-modes-tabs">
+                <button
+                  className={`tab-btn ${activeTab === 'camera' ? 'active' : ''}`}
+                  onClick={() => handleTabChange('camera')}
+                >
+                  <Camera size={16} /> Mode Kamera
+                </button>
+                <button
+                  className={`tab-btn ${activeTab === 'upload' ? 'active' : ''}`}
+                  onClick={() => handleTabChange('upload')}
+                >
+                  <Upload size={16} /> Unggah Foto
+                </button>
+                <button
+                  className={`tab-btn ${activeTab === 'watcher' ? 'active' : ''}`}
+                  onClick={() => handleTabChange('watcher')}
+                >
+                  <FolderOpen size={16} /> Folder Watcher
+                </button>
               </div>
-            </div>
+
+              {activeTab === 'camera' ? (
+                (!isMobile && !forceDesktopLocal) ? (
+                  <div className="desktop-guide-panel">
+                    <div className="guide-header">
+                      <Smartphone className="guide-phone-icon" size={32} />
+                      <div>
+                        <h2 className="guide-title">Gunakan HP Sebagai Kamera Pemotretan</h2>
+                        <p className="guide-subtitle">Hubungkan kamera HP Anda untuk melakukan pemindaian AI secara dinamis.</p>
+                      </div>
+                    </div>
+
+                    <div className="guide-steps-grid">
+                      {/* Opsi 1: WiFi */}
+                      <div className="guide-step-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                        <div className="guide-badge-row">
+                          <span className="guide-step-num">Opsi 1</span>
+                          <Wifi size={18} className="guide-step-icon" />
+                        </div>
+                        <h4 className="guide-step-title">Koneksi Via Wi-Fi (Nirkabel)</h4>
+                        <ol className="guide-step-list" style={{ flexGrow: 1 }}>
+                          <li>Sambungkan HP Anda ke Wi-Fi yang sama dengan Laptop ini.</li>
+                          <li>Pindai <b>QR Code</b> di bawah ini menggunakan kamera HP Anda:</li>
+                        </ol>
+                        <div className="guide-url-box" style={{ fontSize: '0.78rem', wordBreak: 'break-all', margin: '8px 0' }}>
+                          {wifiURL}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px' }}>
+                          <img 
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(wifiURL)}`}
+                            alt="QR Code Wi-Fi"
+                            style={{ border: '4px solid #fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '130px', height: '130px' }}
+                          />
+                          <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '4px', fontWeight: '500' }}>Pindai untuk membuka (Wi-Fi)</span>
+                        </div>
+                      </div>
+
+                      {/* Opsi 2: Kabel USB */}
+                      <div className="guide-step-card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                        <div className="guide-badge-row">
+                          <span className="guide-step-num">Opsi 2</span>
+                          <Usb size={18} className="guide-step-icon" />
+                        </div>
+                        <h4 className="guide-step-title">Koneksi Via Kabel USB</h4>
+                        
+                        {usbIP ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+                            <ol className="guide-step-list" style={{ flexGrow: 1 }}>
+                              <li style={{ color: '#16a34a', fontWeight: '600' }}>✓ Sambungan USB Terdeteksi!</li>
+                              <li>Pindai <b>QR Code USB</b> di bawah ini untuk membuka kamera:</li>
+                            </ol>
+                            <div className="guide-url-box" style={{ fontSize: '0.78rem', wordBreak: 'break-all', margin: '8px 0', borderLeftColor: '#10b981' }}>
+                              {usbURL}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px' }}>
+                              <img 
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(usbURL)}`}
+                                alt="QR Code USB"
+                                style={{ border: '4px solid #fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '130px', height: '130px' }}
+                              />
+                              <span style={{ fontSize: '0.7rem', color: '#16a34a', marginTop: '4px', fontWeight: '600' }}>Pindai untuk membuka (Kabel USB)</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', flexGrow: 1, padding: '10px 0', textAlign: 'center', width: '100%' }}>
+                            <ol className="guide-step-list" style={{ textAlign: 'left', width: '100%', marginBottom: '12px' }}>
+                              <li>Hubungkan HP ke Laptop dengan kabel USB.</li>
+                              <li>Buka Pengaturan HP → Aktifkan <b>USB Tethering (Penambatan USB)</b>.</li>
+                            </ol>
+                            <div style={{ padding: '16px', background: '#f8fafc', border: '1px dashed #e2e8f0', borderRadius: '8px', width: '100%' }}>
+                              <Loader className="guide-step-icon" size={20} style={{ animation: 'spin 2s linear infinite', color: '#64748b', margin: '0 auto 8px' }} />
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '500' }}>Menunggu kabel USB terhubung & tethering aktif...</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="guide-footer-info">
+                      <div className="live-status-container">
+                        <div className="live-status-dot" />
+                        <span className="live-status-text">Menunggu pemotretan dari HP... (Layar PC terintegrasi real-time)</span>
+                      </div>
+                      <button className="btn-force-local" onClick={() => setForceDesktopLocal(true)}>
+                        Buka Kamera Lokal Webcam PC
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="camera-panel">
+                    <div className={`camera-viewport ${status === 'detected' ? 'viewport--detected' : ''} ${status === 'processing' ? 'viewport--processing' : ''}`}>
+                      <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
+                      <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+                      {/* Overlay status */}
+                      <div className={`cam-overlay cam-overlay--${s.color}`}>
+                        <div className="cam-status-dot" />
+                        <span>{s.label}</span>
+                        {status === 'cooldown' && <span className="cam-cooldown">{cooldownSec}s</span>}
+                      </div>
+
+                      {/* Scan result badge */}
+                      {scanResult && status !== 'idle' && (
+                        <div className="cam-badge">
+                          <span>Gear: {scanResult.count}</span>
+                          <span className="badge-sep">|</span>
+                          <span>Conf: {scanResult.confidence}%</span>
+                        </div>
+                      )}
+
+                      {/* Frame guide */}
+                      <div className="cam-frame-guide">
+                        <div className="frame-corner frame-corner--tl" />
+                        <div className="frame-corner frame-corner--tr" />
+                        <div className="frame-corner frame-corner--bl" />
+                        <div className="frame-corner frame-corner--br" />
+                      </div>
+
+                      {!cameraOn && (
+                        <div className="cam-off-screen">
+                          <Camera size={48} strokeWidth={1} />
+                          <p>Kamera belum aktif</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tombol kamera */}
+                    <div className="cam-controls">
+                      {!cameraOn ? (
+                        <button className="btn-cam btn-cam--start" onClick={startCamera}>
+                          <Camera size={18} /> Aktifkan Kamera HP
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            className={`btn-cam ${autoMode ? 'btn-cam--stop-auto' : 'btn-cam--auto'}`}
+                            onClick={() => setAutoMode(!autoMode)}
+                          >
+                            {autoMode ? <><ZapOff size={18}/> Stop Auto</> : <><Zap size={18}/> Auto Capture</>}
+                          </button>
+                          <button
+                            className="btn-cam btn-cam--manual"
+                            onClick={processFullCapture}
+                            disabled={status === 'processing' || status === 'cooldown'}
+                          >
+                            <Camera size={18} /> Foto Manual
+                          </button>
+                          <button className="btn-cam btn-cam--off" onClick={stopCamera}>
+                            Matikan
+                          </button>
+                        </>
+                      )}
+                      {forceDesktopLocal && (
+                        <button className="btn-cam btn-cam--off" style={{ flex: 'none', width: 'auto' }} onClick={() => setForceDesktopLocal(false)}>
+                          Kembali ke Panduan HP
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              ) : activeTab === 'upload' ? (
+                <div className="upload-panel">
+                  <div
+                    className={`camera-viewport ${status === 'processing' ? 'viewport--processing' : ''} ${status === 'detected' ? 'viewport--detected' : ''} ${dragActive ? 'viewport--drag' : ''}`}
+                    onDragEnter={handleDrag}
+                    onDragOver={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDrop={handleDrop}
+                  >
+                    {uploadPreview ? (
+                      <img src={uploadPreview} alt="Preview" className="camera-video upload-preview-img" style={{ objectFit: 'contain' }} />
+                    ) : (
+                      <label htmlFor="file-upload-input" className="upload-drop-zone">
+                        <Upload size={48} strokeWidth={1} className="upload-icon" />
+                        <p className="upload-text-main">Tarik & lepas gambar di sini atau <span>klik untuk memilih</span></p>
+                        <p className="upload-text-sub">Mendukung format JPEG, JPG, PNG</p>
+                      </label>
+                    )}
+
+                    <input
+                      id="file-upload-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      style={{ display: 'none' }}
+                    />
+
+                    {/* Overlay status */}
+                    <div className={`cam-overlay cam-overlay--${s.color}`}>
+                      <div className="cam-status-dot" />
+                      <span>{s.label}</span>
+                      {status === 'cooldown' && <span className="cam-cooldown">{cooldownSec}s</span>}
+                    </div>
+
+                    {/* Frame guide corners */}
+                    {!uploadPreview && (
+                      <div className="cam-frame-guide">
+                        <div className="frame-corner frame-corner--tl" />
+                        <div className="frame-corner frame-corner--tr" />
+                        <div className="frame-corner frame-corner--bl" />
+                        <div className="frame-corner frame-corner--br" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tombol kontrol upload */}
+                  <div className="cam-controls">
+                    {uploadPreview ? (
+                      <>
+                        <button
+                          className="btn-cam btn-cam--manual"
+                          onClick={processUploadedFile}
+                          disabled={status === 'processing' || status === 'cooldown'}
+                        >
+                          <CheckCircle size={18} /> Analisis Foto
+                        </button>
+                        <button
+                          className="btn-cam btn-cam--off"
+                          onClick={clearUploadedFile}
+                          disabled={status === 'processing'}
+                        >
+                          <Trash2 size={18} /> Hapus / Ganti
+                        </button>
+                      </>
+                    ) : (
+                      <label htmlFor="file-upload-input" className="btn-cam btn-cam--start" style={{ cursor: 'pointer', textAlign: 'center' }}>
+                        <Upload size={18} /> Pilih File Gambar
+                      </label>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="watcher-panel">
+                  <div className="watcher-card">
+                    <div className="watcher-icon-wrap">
+                      <FolderOpen size={48} className="watcher-large-icon" />
+                    </div>
+                    <h3 className="watcher-title">Folder Watcher Aktif</h3>
+                    <p className="watcher-desc">
+                      Ambil foto menggunakan kamera bawaan HP Anda dan sinkronisasikan ke folder lokal PC untuk memproses AI secara otomatis tanpa perlu membuka dashboard di HP.
+                    </p>
+
+                    <div className="watcher-path-box">
+                      <span className="path-label">Folder Pemantauan:</span>
+                      <div className="path-value">capstone/watch_folder</div>
+                      <span className="path-hint">Silakan letakkan atau sinkronisasikan foto (.jpg, .png) di sini</span>
+                    </div>
+
+                    <div className="watcher-steps">
+                      <h4>Langkah Penyiapan:</h4>
+                      <ol>
+                        <li>Hubungkan HP Anda ke PC/Laptop (bisa menggunakan kabel USB atau Wi-Fi).</li>
+                        <li>Gunakan software sinkronisasi foto otomatis (misal: <b>Link to Windows</b> bawaan Microsoft, <b>Google Drive</b> Desktop, <b>OneDrive</b>, atau <b>Intel Unison</b>).</li>
+                        <li>Atur software tersebut agar menyinkronkan foto dari kamera HP Anda ke folder <code>capstone/watch_folder</code> di laptop ini.</li>
+                        <li>Ambil foto roda gigi dengan kamera biasa di HP Anda. Hasil deteksi AI akan otomatis muncul di panel sebelah kanan dalam 2 detik!</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
