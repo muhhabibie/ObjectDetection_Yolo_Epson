@@ -42,7 +42,7 @@ async def verify_part(
     isi_file = await file.read()
 
     # 3. Panggil proses AI dari vision_core.py
-    img_raw, img_res, jumlah_part, conf = proses_inspeksi_gambar(isi_file)
+    img_raw, img_res, jumlah_part, conf = proses_inspeksi_gambar(isi_file, target_kuantitas)
 
     # ==========================================
     # 4. HITUNG ABSOLUTE ERROR (Untuk MAE)
