@@ -1,26 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Camera, Zap, ZapOff, Settings, CheckCircle, AlertCircle, Loader, Wifi, Usb, Smartphone, Upload, Trash2, FolderOpen } from 'lucide-react'
+import { Camera, Zap, ZapOff, Settings, CheckCircle, AlertCircle, AlertTriangle, RefreshCw, Loader, Wifi, Usb, Smartphone, Upload, Trash2, Printer } from 'lucide-react'
 import './Capture.css'
 
 const API_BASE = ""
 
 // Status label & warna berdasarkan state
 const STATUS = {
-  idle:       { label: 'Kamera siap',          color: 'gray',   icon: Camera },
-  scanning:   { label: 'Memindai...',           color: 'blue',   icon: Loader },
-  detected:   { label: 'Gear terdeteksi!',      color: 'green',  icon: CheckCircle },
-  processing: { label: 'Memproses AI...',       color: 'purple', icon: Loader },
-  cooldown:   { label: 'Cooldown...',           color: 'orange', icon: Zap },
-  error:      { label: 'Gagal memproses',       color: 'red',    icon: AlertCircle },
-  no_gear:    { label: 'Tidak ada gear',        color: 'gray',   icon: Camera },
+  idle: { label: 'Kamera siap', color: 'gray', icon: Camera },
+  scanning: { label: 'Memindai...', color: 'blue', icon: Loader },
+  detected: { label: 'Gear terdeteksi!', color: 'green', icon: CheckCircle },
+  processing: { label: 'Memproses AI...', color: 'purple', icon: Loader },
+  cooldown: { label: 'Cooldown...', color: 'orange', icon: Zap },
+  error: { label: 'Gagal memproses', color: 'red', icon: AlertCircle },
+  no_gear: { label: 'Tidak ada gear', color: 'gray', icon: Camera },
 }
 
 function ZoomedImageModal({ image, onClose }) {
   if (!image) return null
 
   return (
-    <div 
-      className="zoomed-image-overlay" 
+    <div
+      className="zoomed-image-overlay"
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -37,7 +37,7 @@ function ZoomedImageModal({ image, onClose }) {
         animation: 'fadeIn 0.2s ease'
       }}
     >
-      <div 
+      <div
         style={{
           position: 'absolute',
           top: '20px',
@@ -58,7 +58,7 @@ function ZoomedImageModal({ image, onClose }) {
       >
         &times;
       </div>
-      <div 
+      <div
         style={{
           color: '#ffffff',
           fontSize: '1.1rem',
@@ -72,9 +72,9 @@ function ZoomedImageModal({ image, onClose }) {
       >
         {image.title}
       </div>
-      <img 
-        src={image.url} 
-        alt={image.title} 
+      <img
+        src={image.url}
+        alt={image.title}
         style={{
           maxWidth: '90%',
           maxHeight: '80vh',
@@ -92,20 +92,17 @@ function ZoomedImageModal({ image, onClose }) {
 
 export default function Capture({ user }) {
   const isStorage = user?.role === 'storage_epson'
-  const videoRef    = useRef(null)
-  const canvasRef   = useRef(null)
-  const streamRef   = useRef(null)
-  const scanTimerRef = useRef(null)
-  const cooldownRef  = useRef(null)
+  const cooldownRef = useRef(null)
+  const localVideoRef = useRef(null)
+  const [localStream, setLocalStream] = useState(null)
 
-  const [cameraOn,    setCameraOn]    = useState(false)
-  const [autoMode,    setAutoMode]    = useState(false)
-  const [status,      setStatus]      = useState('idle')
-  const [scanResult,  setScanResult]  = useState(null)   // hasil scan-frame
-  const [lastResult,  setLastResult]  = useState(null)   // hasil inspeksi terakhir
+  const [autoMode, setAutoMode] = useState(false)
+  const [status, setStatus] = useState('idle')
+  const [lastResult, setLastResult] = useState(null)   // hasil inspeksi terakhir
   const [cooldownSec, setCooldownSec] = useState(0)
-  const [showSettings,setShowSettings]= useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [zoomedImage, setZoomedImage] = useState(null)
+  const [autoNoGearDetected, setAutoNoGearDetected] = useState(false)
 
   // ── Mobile / Desktop Detection ──────────────────────────
   const [isMobile] = useState(() => {
@@ -118,10 +115,10 @@ export default function Capture({ user }) {
   const [forceDesktopLocal, setForceDesktopLocal] = useState(false)
 
   // ── Upload Mode States ──────────────────────────────────
-  const [activeTab,   setActiveTab]   = useState('camera') // 'camera' | 'upload'
-  const [uploadedFile,setUploadedFile]= useState(null)
-  const [uploadPreview,setUploadPreview] = useState(null)
-  const [dragActive,  setDragActive]  = useState(false)
+  const [activeTab, setActiveTab] = useState('camera') // 'camera' | 'upload'
+  const [uploadedFile, setUploadedFile] = useState(null)
+  const [uploadPreview, setUploadPreview] = useState(null)
+  const [dragActive, setDragActive] = useState(false)
 
   // ── Polling data hasil inspeksi terakhir (Khusus Desktop)
   useEffect(() => {
@@ -147,18 +144,142 @@ export default function Capture({ user }) {
     return () => clearInterval(interval)
   }, [isMobile, forceDesktopLocal])
 
-  // ── Settings ──────────────────────────────────────────
-  const [partName,     setPartName]     = useState('Gear Roller')
-  const [expectedQty,  setExpectedQty]  = useState(12)
-  const [scanInterval, setScanInterval] = useState(1500)  // ms
-  const [minConf,      setMinConf]      = useState(75)    // %
-  const [cooldownTime, setCooldownTime] = useState(5)     // detik
 
-  // ── Auto Mode Timer ──────────────────────────────────
-  const clearScanTimer = useCallback(() => {
-    if (scanTimerRef.current) clearInterval(scanTimerRef.current)
-    if (cooldownRef.current)  clearInterval(cooldownRef.current)
-  }, [])
+
+  const [liveStreamFrame, setLiveStreamFrame] = useState(null)
+
+  // ── WebSocket Live Stream Connection (Khusus Desktop) ───────────────────
+  useEffect(() => {
+    if (isMobile) return;
+
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    const wsUrl = `${wsProto}//${host}/ws/stream/laptop`
+    
+    let ws = null;
+    let objectUrl = null;
+
+    const connectWS = () => {
+      console.log("Menghubungkan live stream laptop ke: " + wsUrl);
+      ws = new WebSocket(wsUrl);
+      ws.binaryType = 'blob';
+      
+      ws.onmessage = (event) => {
+        if (event.data instanceof Blob) {
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+          }
+          objectUrl = URL.createObjectURL(event.data);
+          setLiveStreamFrame(objectUrl);
+          
+          // OTO: Jika menerima stream dari HP, otomatis pindah ke tab kamera HP!
+          setActiveTab('camera');
+          setForceDesktopLocal(false);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log("Koneksi live stream laptop terputus, mencoba lagi...");
+        setTimeout(connectWS, 2000);
+      };
+    };
+
+    connectWS();
+
+    return () => {
+      if (ws) ws.close();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [isMobile]);
+
+  // ── Local Webcam Stream Management (Khusus HP / Force Desktop) ──────────
+  useEffect(() => {
+    let active = true;
+    let stream = null;
+
+    const startLocalWebcam = async () => {
+      if (activeTab === 'camera' && (isMobile || forceDesktopLocal)) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+          });
+          if (active) {
+            setLocalStream(stream);
+          } else {
+            stream.getTracks().forEach(track => track.stop());
+          }
+        } catch (err) {
+          console.error("Gagal membuka webcam lokal:", err);
+        }
+      }
+    };
+
+    startLocalWebcam();
+
+    return () => {
+      active = false;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      setLocalStream(null);
+    };
+  }, [activeTab, isMobile, forceDesktopLocal]);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(e => console.log("Gagal memutar webcam lokal:", e));
+    }
+  }, [localStream, status, forceDesktopLocal, activeTab]);
+
+
+  // ── Settings ──────────────────────────────────────────
+  const [partName, setPartName] = useState(() => localStorage.getItem('partName') || 'Gear Roller')
+  const [expectedQty, setExpectedQty] = useState(() => {
+    const saved = localStorage.getItem('expectedQty')
+    return saved !== null ? Number(saved) : 12
+  })
+  const [scanInterval, setScanInterval] = useState(() => {
+    const saved = localStorage.getItem('scanInterval')
+    return saved !== null ? Number(saved) : 1500
+  })
+  const [triggerMode, setTriggerMode] = useState(() => {
+    const saved = localStorage.getItem('triggerMode')
+    return saved !== null ? saved : 'gear_detection'
+  })
+  const [cooldownTime, setCooldownTime] = useState(() => {
+    const saved = localStorage.getItem('cooldownTime')
+    return saved !== null ? Number(saved) : 5
+  })
+  const [confThreshold, setConfThreshold] = useState(() => {
+    const saved = localStorage.getItem('confThreshold')
+    return saved !== null ? Number(saved) : 0.50
+  })
+
+  // ── LocalStorage Sync effects ────────────────────────
+  useEffect(() => {
+    localStorage.setItem('partName', partName)
+  }, [partName])
+
+  useEffect(() => {
+    localStorage.setItem('expectedQty', expectedQty)
+  }, [expectedQty])
+
+  useEffect(() => {
+    localStorage.setItem('scanInterval', scanInterval)
+  }, [scanInterval])
+
+  useEffect(() => {
+    localStorage.setItem('triggerMode', triggerMode)
+  }, [triggerMode])
+
+  useEffect(() => {
+    localStorage.setItem('cooldownTime', cooldownTime)
+  }, [cooldownTime])
+
+  useEffect(() => {
+    localStorage.setItem('confThreshold', confThreshold)
+  }, [confThreshold])
 
   // ── Cooldown Timer ───────────────────────────────────
   const startCooldown = useCallback(() => {
@@ -175,151 +296,216 @@ export default function Capture({ user }) {
     }, 1000)
   }, [cooldownTime])
 
-  // ── Nyalakan Kamera ──────────────────────────────────
-  const startCamera = async () => {
+  const triggerSingleShot = useCallback(async () => {
+    setAutoNoGearDetected(false);
+    setStatus('processing');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.play()
-      }
-      setCameraOn(true)
-      setStatus('idle')
-    } catch (err) {
-      alert('Tidak bisa akses kamera: ' + err.message)
-    }
-  }
+      let videoEl = localVideoRef.current;
+      let activeStream = localStream;
+      let temporaryStream = null;
 
-  // ── Matikan Kamera ───────────────────────────────────
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
+      // Jika kita sedang menggunakan preview kamera lokal aktif
+      if (!videoEl || !activeStream) {
+        temporaryStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        const tempVideo = document.createElement('video');
+        tempVideo.srcObject = temporaryStream;
+        tempVideo.setAttribute('playsinline', 'true');
+        tempVideo.muted = true;
+        await tempVideo.play();
+        videoEl = tempVideo;
+        // Tunggu 800ms untuk autofocus jika streaming baru dibuat
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 640;
+      const ctx = canvas.getContext('2d');
+
+      if (videoEl.videoWidth && videoEl.videoHeight && videoEl.parentElement) {
+        const W_vid = videoEl.videoWidth;
+        const H_vid = videoEl.videoHeight;
+        const W_cont = videoEl.parentElement.clientWidth || 800;
+        const H_cont = videoEl.parentElement.clientHeight || 500;
+
+        const R_cont = W_cont / H_cont;
+        const R_vid = W_vid / H_vid;
+
+        let S;
+        if (R_cont > R_vid) {
+          S = W_cont / W_vid;
+        } else {
+          S = H_cont / H_vid;
+        }
+        const W_scaled = W_vid * S;
+        const H_scaled = H_vid * S;
+
+        const dx = (W_cont - W_scaled) / 2;
+        const dy = (H_cont - H_scaled) / 2;
+
+        // Inset 20% di CSS (.cam-frame-guide { inset: 20% })
+        const X_box = 0.20 * W_cont;
+        const Y_box = 0.20 * H_cont;
+        const W_box = 0.60 * W_cont;
+        const H_box = 0.60 * H_cont;
+
+        const sx = (X_box - dx) / S;
+        const sy = (Y_box - dy) / S;
+        const sw = W_box / S;
+        const sh = H_box / S;
+
+        ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      } else {
+        canvas.width = videoEl.videoWidth || 1280;
+        canvas.height = videoEl.videoHeight || 720;
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      }
+
+      if (temporaryStream) {
+        temporaryStream.getTracks().forEach(track => track.stop());
+      }
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+      if (!blob) {
+        throw new Error("Gagal mengambil gambar dari sensor");
+      }
+
+      const form = new FormData();
+      form.append('file', blob, 'trigger_shot.jpg');
+      form.append('part_name', partName);
+      form.append('expected_qty', Number(expectedQty) || 12);
+
+      const res = await fetch(`${API_BASE}/api/upload-camera/`, {
+        method: 'POST',
+        body: form
+      });
+
+      if (!res.ok) throw new Error('Gagal memproses gambar');
+      const data = await res.json();
+      setLastResult(data);
+      setStatus('cooldown');
+      startCooldown();
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengambil foto: ' + err.message);
+      setStatus('error');
     }
-    setCameraOn(false)
-    setAutoMode(false)
-    setStatus('idle')
-    clearScanTimer()
-  }, [clearScanTimer])
+  }, [partName, expectedQty, startCooldown, localStream])
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
-    if (tab === 'upload') {
-      stopCamera()
+    if (tab !== 'camera') {
+      setAutoMode(false)
     }
   }
 
-  // ── Ambil Frame dari Video → Blob ────────────────────
-  const captureFrame = useCallback((quality = 0.7) => {
-    const video  = videoRef.current
-    const canvas = canvasRef.current
-    if (!video || !canvas) return null
-    
-    const w_vp = video.clientWidth
-    const h_vp = video.clientHeight
-    const w_vid = video.videoWidth
-    const h_vid = video.videoHeight
+  const handlePrintLabel = useCallback(() => {
+    if (!lastResult) return
 
-    if (w_vp > 0 && h_vp > 0 && w_vid > 0 && h_vid > 0) {
-      const scale = Math.max(w_vp / w_vid, h_vp / h_vid)
-      const w_scaled = w_vid * scale
-      const h_scaled = h_vid * scale
+    const qrData = `ID: ${lastResult.inspection_id}\nPart: ${lastResult.part_name}\nQty: ${lastResult.detected_qty}/${lastResult.expected_qty}\nStatus: ${lastResult.is_match ? 'PASSED' : 'FAILED'}\nOperator: ${user?.username || 'QC Operator'}\nDate: ${new Date(lastResult.created_at || Date.now()).toLocaleString('id-ID')}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
 
-      const dx = (w_vp - w_scaled) / 2
-      const dy = (h_vp - h_scaled) / 2
-
-      // Bingkai di CSS diset inset: 20% (x1_vp = 20%, y1_vp = 20%, lebar/tinggi = 60%)
-      const x1_vp = w_vp * 0.20
-      const y1_vp = h_vp * 0.20
-      const width_vp = w_vp * 0.60
-      const height_vp = h_vp * 0.60
-
-      let x_crop = (x1_vp - dx) / scale
-      let y_crop = (y1_vp - dy) / scale
-      let w_crop = width_vp / scale
-      let h_crop = height_vp / scale
-
-      // Validasi batas koordinat
-      if (x_crop < 0) {
-        w_crop += x_crop
-        x_crop = 0
-      }
-      if (y_crop < 0) {
-        h_crop += y_crop
-        y_crop = 0
-      }
-      if (x_crop + w_crop > w_vid) {
-        w_crop = w_vid - x_crop
-      }
-      if (y_crop + h_crop > h_vid) {
-        h_crop = h_vid - y_crop
-      }
-
-      canvas.width  = w_crop
-      canvas.height = h_crop
-      canvas.getContext('2d').drawImage(video, x_crop, y_crop, w_crop, h_crop, 0, 0, w_crop, h_crop)
-    } else {
-      // Fallback ke full frame jika dimensi client belum siap
-      canvas.width  = w_vid
-      canvas.height = h_vid
-      canvas.getContext('2d').drawImage(video, 0, 0)
+    const printWindow = window.open('', '_blank', 'width=600,height=400');
+    if (!printWindow) {
+      alert('Silakan aktifkan pop-up browser untuk mencetak label.');
+      return;
     }
     
-    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality))
-  }, [])
-
-  // ── Proses Capture Penuh → Kirim ke AI & DB ──────────
-  const processFullCapture = useCallback(async () => {
-    setStatus('processing')
-    const blob = await captureFrame(0.95)  // kualitas tinggi untuk simpan
-    if (!blob) return
-
-    const form = new FormData()
-    form.append('file', blob, 'capture.jpg')
-    form.append('part_name',    partName || 'Gear Roller')
-    form.append('expected_qty', Number(expectedQty) || 12)
-
-    try {
-      const res  = await fetch(`${API_BASE}/api/upload-camera/`, { method: 'POST', body: form })
-      const data = await res.json()
-      setLastResult(data)
-      setStatus('cooldown')
-      startCooldown()
-    } catch {
-      setStatus('error')
-    }
-  }, [captureFrame, partName, expectedQty, startCooldown])
-
-  // ── Scan Frame (cek apakah ada gear) ─────────────────
-  const scanFrame = useCallback(async () => {
-    if (!videoRef.current || !cameraOn) return
-    setStatus('scanning')
-
-    const blob = await captureFrame(0.6)
-    if (!blob) return
-
-    const form = new FormData()
-    form.append('file', blob, 'frame.jpg')
-
-    try {
-      const res  = await fetch(`${API_BASE}/api/scan-frame/`, { method: 'POST', body: form })
-      const data = await res.json()
-      setScanResult(data)
-
-      if (data.detected && data.confidence >= minConf) {
-        setStatus('detected')
-        // Trigger capture otomatis!
-        await processFullCapture()
-      } else {
-        setStatus(data.detected ? 'no_gear' : 'no_gear')
-      }
-    } catch {
-      setStatus('error')
-    }
-  }, [cameraOn, minConf, captureFrame, processFullCapture])
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Cetak Label - ${lastResult.inspection_id}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+            body { 
+              font-family: 'Inter', sans-serif; 
+              padding: 20px; 
+              margin: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              background: #fff;
+            }
+            .label-card { 
+              border: 3px solid #000; 
+              padding: 20px; 
+              border-radius: 12px; 
+              display: flex; 
+              align-items: center; 
+              gap: 20px; 
+              max-width: 480px; 
+              width: 100%;
+              box-sizing: border-box;
+            }
+            .label-info { 
+              text-align: left; 
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+            }
+            .label-info h3 { 
+              margin: 0 0 6px 0; 
+              font-size: 1.15rem; 
+              font-weight: 800;
+              letter-spacing: 0.5px;
+              color: #000;
+            }
+            .label-info p { 
+              margin: 0; 
+              font-size: 0.85rem; 
+              color: #334155; 
+              line-height: 1.4;
+            }
+            .status-badge { 
+              display: inline-block; 
+              padding: 4px 10px; 
+              border-radius: 6px; 
+              font-weight: 700; 
+              font-size: 0.75rem; 
+              margin-top: 6px; 
+              align-self: flex-start;
+              text-transform: uppercase;
+              border: 1px solid currentColor;
+            }
+            .status--passed { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+            .status--failed { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+            @media print {
+              body { padding: 0; }
+              .label-card { border-width: 2px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="label-card">
+            <img src="${qrUrl}" alt="QR" width="130" height="130" style="display: block; flex-shrink: 0;" />
+            <div class="label-info">
+              <h3>EPSON QC PASS</h3>
+              <p><b>ID Inspeksi:</b> ${lastResult.inspection_id}</p>
+              <p><b>Nama Part:</b> ${lastResult.part_name}</p>
+              <p><b>Kuantitas:</b> ${lastResult.detected_qty} / ${lastResult.expected_qty} PCS</p>
+              <p><b>Operator:</b> ${user?.username || 'QC Operator'}</p>
+              <p><b>Waktu:</b> ${new Date(lastResult.created_at || Date.now()).toLocaleString('id-ID')}</p>
+              <span class="status-badge ${lastResult.is_match ? 'status--passed' : 'status--failed'}">
+                ${lastResult.is_match ? 'PASSED (SESUAI)' : 'FAILED (SELISIH)'}
+              </span>
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.close();
+              }, 300);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }, [lastResult, user])
 
   // ── Drag & Drop / File Upload Handlers ──────────────
   const handleDrag = (e) => {
@@ -391,25 +577,124 @@ export default function Capture({ user }) {
     }
   }, [uploadedFile, partName, expectedQty, startCooldown])
 
+  const triggerAutoModeStep = useCallback(async () => {
+    if (status === 'processing' || status === 'cooldown' || status === 'scanning') return;
+
+    if (triggerMode === 'interval') {
+      // Langsung jepret foto
+      triggerSingleShot();
+    } else if (triggerMode === 'gear_detection') {
+      if (isMobile) {
+        // Mode deteksi HP dilakukan oleh HP itu sendiri via camera.html
+        return;
+      }
+
+      const videoEl = localVideoRef.current;
+      if (!videoEl || !localStream) return;
+
+      setStatus('scanning');
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 640;
+        const ctx = canvas.getContext('2d');
+
+        if (videoEl.videoWidth && videoEl.videoHeight && videoEl.parentElement) {
+          const W_vid = videoEl.videoWidth;
+          const H_vid = videoEl.videoHeight;
+          const W_cont = videoEl.parentElement.clientWidth || 800;
+          const H_cont = videoEl.parentElement.clientHeight || 500;
+
+          const R_cont = W_cont / H_cont;
+          const R_vid = W_vid / H_vid;
+
+          let S;
+          if (R_cont > R_vid) {
+            S = W_cont / W_vid;
+          } else {
+            S = H_cont / H_vid;
+          }
+          const W_scaled = W_vid * S;
+          const H_scaled = H_vid * S;
+
+          const dx = (W_cont - W_scaled) / 2;
+          const dy = (H_cont - H_scaled) / 2;
+
+          const X_box = 0.20 * W_cont;
+          const Y_box = 0.20 * H_cont;
+          const W_box = 0.60 * W_cont;
+          const H_box = 0.60 * H_cont;
+
+          const sx = (X_box - dx) / S;
+          const sy = (Y_box - dy) / S;
+          const sw = W_box / S;
+          const sh = H_box / S;
+
+          ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        } else {
+          canvas.width = videoEl.videoWidth || 1280;
+          canvas.height = videoEl.videoHeight || 720;
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        }
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+        if (!blob) {
+          setStatus('idle');
+          return;
+        }
+
+        const form = new FormData();
+        form.append('file', blob, 'scan_frame.jpg');
+
+        const res = await fetch(`${API_BASE}/api/scan-frame/`, {
+          method: 'POST',
+          body: form
+        });
+
+        if (!res.ok) throw new Error("Gagal melakukan scan frame");
+        const data = await res.json();
+
+        if (data.detected) {
+          setAutoNoGearDetected(false);
+          setStatus('detected');
+          await new Promise(r => setTimeout(r, 400));
+          await triggerSingleShot();
+        } else {
+          setAutoNoGearDetected(true);
+          setStatus('idle');
+        }
+      } catch (err) {
+        console.error("Error auto trigger scan:", err);
+        setAutoNoGearDetected(true);
+        setStatus('idle');
+      }
+    }
+  }, [triggerMode, isMobile, forceDesktopLocal, localStream, status, triggerSingleShot])
+
+  // ── Auto Trigger Loop ────────────────────────────────
   useEffect(() => {
-    clearScanTimer()
-    if (autoMode && cameraOn) {
-      scanTimerRef.current = setInterval(() => {
-        if (status !== 'processing' && status !== 'cooldown') {
-          scanFrame()
+    if (autoMode) {
+      const intervalId = setInterval(() => {
+        if (status !== 'processing' && status !== 'cooldown' && status !== 'scanning') {
+          triggerAutoModeStep()
         }
       }, Number(scanInterval) || 1500)
+      return () => clearInterval(intervalId)
     }
-    return clearScanTimer
-  }, [autoMode, cameraOn, scanInterval, status, scanFrame, clearScanTimer])
+  }, [autoMode, status, triggerAutoModeStep, scanInterval])
+
+  useEffect(() => {
+    if (!autoMode) {
+      setAutoNoGearDetected(false)
+    }
+  }, [autoMode])
 
   // ── Cleanup saat unmount ─────────────────────────────
   useEffect(() => {
     return () => {
-      stopCamera()
-      clearScanTimer()
+      if (cooldownRef.current) clearInterval(cooldownRef.current)
     }
-  }, [stopCamera, clearScanTimer])
+  }, [])
 
   // Cleanup object URL preview ketika uploadPreview berubah atau unmount
   useEffect(() => {
@@ -422,22 +707,31 @@ export default function Capture({ user }) {
 
   // Sinkronisasi parameter ke backend setiap ada perubahan (dengan debounce 500ms)
   useEffect(() => {
+    let active = true
     const syncSettings = async () => {
       try {
-        await fetch(`${ACTIVE_SETTINGS_API || (API_BASE + '/api/active-settings')}`, {
+        await fetch(`${API_BASE}/api/active-settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ part_name: partName, expected_qty: expectedQty })
+          body: JSON.stringify({ part_name: partName, expected_qty: expectedQty, conf_threshold: confThreshold })
         })
       } catch (err) {
         console.error("Gagal sinkronisasi parameter ke backend:", err)
       }
     }
-    // define active settings fallback inline
-    const ACTIVE_SETTINGS_API = `${API_BASE}/api/active-settings`
     const timer = setTimeout(syncSettings, 500)
-    return () => clearTimeout(timer)
-  }, [partName, expectedQty])
+    return () => {
+      clearTimeout(timer)
+      if (active) {
+        fetch(`${API_BASE}/api/active-settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ part_name: partName, expected_qty: expectedQty, conf_threshold: confThreshold }),
+          keepalive: true
+        }).catch(() => { })
+      }
+    }
+  }, [partName, expectedQty, confThreshold])
 
   // Ambil parameter aktif dari backend saat pertama kali dimuat
   useEffect(() => {
@@ -446,8 +740,18 @@ export default function Capture({ user }) {
         const res = await fetch(`${API_BASE}/api/active-settings`)
         if (res.ok) {
           const data = await res.json()
-          if (data.part_name) setPartName(data.part_name)
-          if (data.expected_qty) setExpectedQty(data.expected_qty)
+          if (data.part_name) {
+            setPartName(data.part_name)
+            localStorage.setItem('partName', data.part_name)
+          }
+          if (data.expected_qty) {
+            setExpectedQty(data.expected_qty)
+            localStorage.setItem('expectedQty', data.expected_qty)
+          }
+          if (data.conf_threshold !== undefined) {
+            setConfThreshold(data.conf_threshold)
+            localStorage.setItem('confThreshold', data.conf_threshold)
+          }
         }
       } catch (err) {
         console.error("Gagal mengambil active settings:", err)
@@ -456,7 +760,11 @@ export default function Capture({ user }) {
     fetchActiveSettings()
   }, [])
 
-  const s = STATUS[status] || STATUS.idle
+  const s = { ...(STATUS[status] || STATUS.idle) }
+  if (status === 'idle' && autoMode) {
+    s.label = "Standby (Mencari gear...)"
+    s.color = "blue"
+  }
 
   const [interfaces, setInterfaces] = useState([])
 
@@ -483,9 +791,9 @@ export default function Capture({ user }) {
 
   const getRealWifiIP = (ifaces) => {
     // 1. Cari adapter Wi-Fi eksplisit
-    const wifi = ifaces.find(iface => 
-      iface.name.toLowerCase().includes('wi-fi') || 
-      iface.name.toLowerCase().includes('wifi') || 
+    const wifi = ifaces.find(iface =>
+      iface.name.toLowerCase().includes('wi-fi') ||
+      iface.name.toLowerCase().includes('wifi') ||
       iface.description.toLowerCase().includes('wireless') ||
       iface.description.toLowerCase().includes('wi-fi')
     )
@@ -496,7 +804,7 @@ export default function Capture({ user }) {
       const ip = iface.ip
       const name = iface.name.toLowerCase()
       const desc = iface.description.toLowerCase()
-      
+
       if (ip === '127.0.0.1' || ip === 'localhost') return false
       if (ip.startsWith('192.168.56.') || desc.includes('virtualbox')) return false
       if (ip.startsWith('192.168.99.') || desc.includes('docker')) return false
@@ -514,12 +822,12 @@ export default function Capture({ user }) {
       const ip = iface.ip
       const desc = iface.description.toLowerCase()
       const name = iface.name.toLowerCase()
-      
+
       return (
-        ip.startsWith('192.168.42.') || 
-        ip.startsWith('172.20.10.') || 
-        desc.includes('ndis') || 
-        desc.includes('internet sharing') || 
+        ip.startsWith('192.168.42.') ||
+        ip.startsWith('172.20.10.') ||
+        desc.includes('ndis') ||
+        desc.includes('internet sharing') ||
         desc.includes('apple mobile') ||
         name.includes('remote ndis')
       )
@@ -570,12 +878,6 @@ export default function Capture({ user }) {
                 >
                   <Upload size={16} /> Unggah Foto
                 </button>
-                <button
-                  className={`tab-btn ${activeTab === 'watcher' ? 'active' : ''}`}
-                  onClick={() => handleTabChange('watcher')}
-                >
-                  <FolderOpen size={16} /> Folder Watcher
-                </button>
               </div>
 
               {activeTab === 'camera' ? (
@@ -605,7 +907,7 @@ export default function Capture({ user }) {
                           {wifiURL}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px' }}>
-                          <img 
+                          <img
                             src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(wifiURL)}`}
                             alt="QR Code Wi-Fi"
                             style={{ border: '4px solid #fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '130px', height: '130px' }}
@@ -621,7 +923,7 @@ export default function Capture({ user }) {
                           <Usb size={18} className="guide-step-icon" />
                         </div>
                         <h4 className="guide-step-title">Koneksi Via Kabel USB</h4>
-                        
+
                         {usbIP ? (
                           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
                             <ol className="guide-step-list" style={{ flexGrow: 1 }}>
@@ -632,7 +934,7 @@ export default function Capture({ user }) {
                               {usbURL}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px' }}>
-                              <img 
+                              <img
                                 src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(usbURL)}`}
                                 alt="QR Code USB"
                                 style={{ border: '4px solid #fff', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '130px', height: '130px' }}
@@ -668,67 +970,153 @@ export default function Capture({ user }) {
                 ) : (
                   <div className="camera-panel">
                     <div className={`camera-viewport ${status === 'detected' ? 'viewport--detected' : ''} ${status === 'processing' ? 'viewport--processing' : ''}`}>
-                      <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
-                      <canvas ref={canvasRef} style={{ display: 'none' }} />
+                      {status === 'cooldown' && lastResult ? (
+                        <img
+                          src={`${API_BASE}${lastResult.image_result_path || lastResult.image_path}`}
+                          alt="Hasil deteksi terbaru"
+                          className="camera-video"
+                          style={{ objectFit: 'contain', background: '#090d16' }}
+                        />
+                      ) : (isMobile || forceDesktopLocal) ? (
+                        <video
+                          ref={localVideoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="camera-video"
+                          style={{ objectFit: 'cover', background: '#090d16', width: '100%', height: '100%' }}
+                        />
+                      ) : liveStreamFrame ? (
+                        <img
+                          src={liveStreamFrame}
+                          alt="Live Stream Kamera HP"
+                          className="camera-video"
+                          style={{ objectFit: 'cover', background: '#090d16' }}
+                        />
+                      ) : lastResult ? (
+                        <img
+                          src={`${API_BASE}${lastResult.image_result_path || lastResult.image_path}`}
+                          alt="Hasil deteksi terbaru"
+                          className="camera-video"
+                          style={{ objectFit: 'contain', background: '#090d16' }}
+                        />
+                      ) : (
+                        <div className="cam-off-screen" style={{ flexDirection: 'column' }}>
+                          <Camera size={48} strokeWidth={1} style={{ color: '#64748b' }} />
+                          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Kamera standby / Menunggu trigger</p>
+                        </div>
+                      )}
 
-                      {/* Overlay status */}
+                      {/* Framing Guide Corners */}
+                      {status !== 'cooldown' && (
+                        <div className="cam-frame-guide">
+                          <div className="frame-corner frame-corner--tl" />
+                          <div className="frame-corner frame-corner--tr" />
+                          <div className="frame-corner frame-corner--bl" />
+                          <div className="frame-corner frame-corner--br" />
+                        </div>
+                      )}
+
+                      {/* Status overlay */}
                       <div className={`cam-overlay cam-overlay--${s.color}`}>
                         <div className="cam-status-dot" />
                         <span>{s.label}</span>
                         {status === 'cooldown' && <span className="cam-cooldown">{cooldownSec}s</span>}
                       </div>
 
-                      {/* Scan result badge */}
-                      {scanResult && status !== 'idle' && (
-                        <div className="cam-badge">
-                          <span>Gear: {scanResult.count}</span>
-                          <span className="badge-sep">|</span>
-                          <span>Conf: {scanResult.confidence}%</span>
+                      {/* Notifikasi Part Tidak Terdeteksi di Viewport */}
+                      {((lastResult && lastResult.detected_qty === 0 && (status === 'cooldown' || status === 'idle')) || autoNoGearDetected) && (
+                        <div className="viewport-warning-banner" style={{
+                          position: 'absolute',
+                          bottom: '16px',
+                          left: '16px',
+                          right: '16px',
+                          background: 'rgba(239, 68, 68, 0.95)',
+                          backdropFilter: 'blur(8px)',
+                          color: '#ffffff',
+                          padding: '12px 16px',
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          fontSize: '0.85rem',
+                          fontWeight: '600',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+                          zIndex: 20
+                        }}>
+                          <AlertTriangle size={18} style={{ color: '#ffffff', flexShrink: 0 }} />
+                          <span>Peringatan: Roda gigi tidak terdeteksi! Pastikan part berada di dalam kotak pembingkai.</span>
                         </div>
                       )}
 
-                      {/* Frame guide */}
-                      <div className="cam-frame-guide">
-                        <div className="frame-corner frame-corner--tl" />
-                        <div className="frame-corner frame-corner--tr" />
-                        <div className="frame-corner frame-corner--bl" />
-                        <div className="frame-corner frame-corner--br" />
-                      </div>
-
-                      {!cameraOn && (
-                        <div className="cam-off-screen">
-                          <Camera size={48} strokeWidth={1} />
-                          <p>Kamera belum aktif</p>
+                      {/* Processing loading state overlay */}
+                      {status === 'processing' && (
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 10,
+                          color: '#ffffff',
+                          gap: '12px'
+                        }}>
+                          <Loader size={36} style={{ animation: 'spin 1.5s linear infinite', color: '#8b5cf6' }} />
+                          <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Memproses AI...</span>
                         </div>
                       )}
                     </div>
 
                     {/* Tombol kamera */}
-                    <div className="cam-controls">
-                      {!cameraOn ? (
-                        <button className="btn-cam btn-cam--start" onClick={startCamera}>
-                          <Camera size={18} /> Aktifkan Kamera HP
+                    <div className="cam-controls" style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '8px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>Toggle Trigger</span>
+                        <button
+                          type="button"
+                          className={`btn-cam-toggle ${autoMode ? 'active' : ''}`}
+                          onClick={() => setAutoMode(!autoMode)}
+                          style={{
+                            width: '46px',
+                            height: '24px',
+                            borderRadius: '12px',
+                            background: autoMode ? '#10b981' : '#cbd5e1',
+                            border: 'none',
+                            position: 'relative',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s ease',
+                            padding: 0
+                          }}
+                        >
+                          <div style={{
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            position: 'absolute',
+                            top: '3px',
+                            left: autoMode ? '25px' : '3px',
+                            transition: 'left 0.2s ease',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                          }} />
                         </button>
-                      ) : (
-                        <>
-                          <button
-                            className={`btn-cam ${autoMode ? 'btn-cam--stop-auto' : 'btn-cam--auto'}`}
-                            onClick={() => setAutoMode(!autoMode)}
-                          >
-                            {autoMode ? <><ZapOff size={18}/> Stop Auto</> : <><Zap size={18}/> Auto Capture</>}
-                          </button>
-                          <button
-                            className="btn-cam btn-cam--manual"
-                            onClick={processFullCapture}
-                            disabled={status === 'processing' || status === 'cooldown'}
-                          >
-                            <Camera size={18} /> Foto Manual
-                          </button>
-                          <button className="btn-cam btn-cam--off" onClick={stopCamera}>
-                            Matikan
-                          </button>
-                        </>
-                      )}
+                      </div>
+
+                      <button
+                        className="btn-cam btn-cam--manual"
+                        onClick={triggerSingleShot}
+                        disabled={autoMode || status === 'processing' || status === 'cooldown'}
+                        style={{
+                          background: autoMode ? '#cbd5e1' : '#6366f1',
+                          color: autoMode ? '#64748b' : '#ffffff',
+                          cursor: autoMode ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        <Camera size={18} /> Foto Manual
+                      </button>
+
                       {forceDesktopLocal && (
                         <button className="btn-cam btn-cam--off" style={{ flex: 'none', width: 'auto' }} onClick={() => setForceDesktopLocal(false)}>
                           Kembali ke Panduan HP
@@ -737,7 +1125,7 @@ export default function Capture({ user }) {
                     </div>
                   </div>
                 )
-              ) : activeTab === 'upload' ? (
+              ) : (
                 <div className="upload-panel">
                   <div
                     className={`camera-viewport ${status === 'processing' ? 'viewport--processing' : ''} ${status === 'detected' ? 'viewport--detected' : ''} ${dragActive ? 'viewport--drag' : ''}`}
@@ -780,6 +1168,32 @@ export default function Capture({ user }) {
                         <div className="frame-corner frame-corner--br" />
                       </div>
                     )}
+
+                    {/* Notifikasi Part Tidak Terdeteksi di Viewport */}
+                    {((lastResult && lastResult.detected_qty === 0 && (status === 'cooldown' || status === 'idle')) || autoNoGearDetected) && (
+                      <div className="viewport-warning-banner" style={{
+                        position: 'absolute',
+                        bottom: '16px',
+                        left: '16px',
+                        right: '16px',
+                        background: 'rgba(239, 68, 68, 0.95)',
+                        backdropFilter: 'blur(8px)',
+                        color: '#ffffff',
+                        padding: '12px 16px',
+                        borderRadius: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '0.85rem',
+                        fontWeight: '600',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+                        zIndex: 20
+                      }}>
+                        <AlertTriangle size={18} style={{ color: '#ffffff', flexShrink: 0 }} />
+                        <span>Peringatan: Roda gigi tidak terdeteksi! Pastikan part berada di dalam kotak pembingkai.</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Tombol kontrol upload */}
@@ -808,34 +1222,6 @@ export default function Capture({ user }) {
                     )}
                   </div>
                 </div>
-              ) : (
-                <div className="watcher-panel">
-                  <div className="watcher-card">
-                    <div className="watcher-icon-wrap">
-                      <FolderOpen size={48} className="watcher-large-icon" />
-                    </div>
-                    <h3 className="watcher-title">Folder Watcher Aktif</h3>
-                    <p className="watcher-desc">
-                      Ambil foto menggunakan kamera bawaan HP Anda dan sinkronisasikan ke folder lokal PC untuk memproses AI secara otomatis tanpa perlu membuka dashboard di HP.
-                    </p>
-
-                    <div className="watcher-path-box">
-                      <span className="path-label">Folder Pemantauan:</span>
-                      <div className="path-value">capstone/watch_folder</div>
-                      <span className="path-hint">Silakan letakkan atau sinkronisasikan foto (.jpg, .png) di sini</span>
-                    </div>
-
-                    <div className="watcher-steps">
-                      <h4>Langkah Penyiapan:</h4>
-                      <ol>
-                        <li>Hubungkan HP Anda ke PC/Laptop (bisa menggunakan kabel USB atau Wi-Fi).</li>
-                        <li>Gunakan software sinkronisasi foto otomatis (misal: <b>Link to Windows</b> bawaan Microsoft, <b>Google Drive</b> Desktop, <b>OneDrive</b>, atau <b>Intel Unison</b>).</li>
-                        <li>Atur software tersebut agar menyinkronkan foto dari kamera HP Anda ke folder <code>capstone/watch_folder</code> di laptop ini.</li>
-                        <li>Ambil foto roda gigi dengan kamera biasa di HP Anda. Hasil deteksi AI akan otomatis muncul di panel sebelah kanan dalam 2 detik!</li>
-                      </ol>
-                    </div>
-                  </div>
-                </div>
               )}
             </>
           )}
@@ -855,11 +1241,23 @@ export default function Capture({ user }) {
 
             <div className="cp-field">
               <label>Nama Part</label>
-              <input value={partName} onChange={e => setPartName(e.target.value)} placeholder="Gear Roller" />
+              <select value={partName} onChange={e => setPartName(e.target.value)}>
+                <option value="Gear Roller">Gear Roller</option>
+                <option value="Gear Flange">Gear Flange</option>
+                <option value="Pinion Gear">Pinion Gear</option>
+                <option value="Spur Gear">Spur Gear</option>
+              </select>
             </div>
             <div className="cp-field">
               <label>Jumlah Expected</label>
               <input type="number" min={1} value={expectedQty} onChange={e => setExpectedQty(e.target.value === '' ? '' : Number(e.target.value))} />
+            </div>
+            <div className="cp-field">
+              <label>Mode Trigger Auto</label>
+              <select value={triggerMode} onChange={e => setTriggerMode(e.target.value)}>
+                <option value="gear_detection">Auto: Deteksi Gear</option>
+                <option value="interval">Auto: Jeda Waktu</option>
+              </select>
             </div>
 
             {/* Settings tambahan */}
@@ -870,12 +1268,20 @@ export default function Capture({ user }) {
                   <input type="number" min={500} step={500} value={scanInterval} onChange={e => setScanInterval(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
                 <div className="cp-field">
-                  <label>Min. Confidence Trigger (%)</label>
-                  <input type="number" min={50} max={100} value={minConf} onChange={e => setMinConf(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-                <div className="cp-field">
                   <label>Cooldown setelah capture (detik)</label>
                   <input type="number" min={1} max={30} value={cooldownTime} onChange={e => setCooldownTime(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
+                <div className="cp-field">
+                  <label>Ambang Batas Keyakinan AI ({(confThreshold * 100).toFixed(0)}%)</label>
+                  <input 
+                    type="range" 
+                    min="0.10" 
+                    max="0.95" 
+                    step="0.05" 
+                    value={confThreshold} 
+                    onChange={e => setConfThreshold(Number(e.target.value))} 
+                    className="threshold-slider"
+                  />
                 </div>
               </div>
             )}
@@ -883,26 +1289,47 @@ export default function Capture({ user }) {
 
           {/* Status auto mode */}
           <div className={`auto-status-card ${autoMode ? 'auto-status-card--on' : ''}`}>
-            <div className="auto-status-icon">{autoMode ? <Zap size={20}/> : <ZapOff size={20}/>}</div>
+            <div className="auto-status-icon">{autoMode ? <Zap size={20} /> : <ZapOff size={20} />}</div>
             <div>
               <div className="auto-status-label">{autoMode ? 'Auto Mode AKTIF' : 'Auto Mode MATI'}</div>
               <div className="auto-status-sub">
                 {autoMode
-                  ? `Scan tiap ${scanInterval/1000}s · Trigger >${minConf}% · Cooldown ${cooldownTime}s`
+                  ? `Mode: ${triggerMode === 'gear_detection' ? 'Deteksi Gear' : 'Jeda Waktu'} · Scan tiap ${scanInterval / 1000}s · Cooldown ${cooldownTime}s`
                   : 'Aktifkan untuk foto otomatis saat gear terdeteksi'}
               </div>
             </div>
           </div>
+
+
 
           {/* Hasil inspeksi terakhir */}
           {lastResult && (
             <div className={`result-card ${lastResult.is_match ? 'result-card--match' : 'result-card--mismatch'}`}>
               <div className="result-header">
                 {lastResult.is_match
-                  ? <><CheckCircle size={18}/> Hasil: SESUAI</>
-                  : <><AlertCircle size={18}/> Hasil: SELISIH</>}
+                  ? <><CheckCircle size={18} /> Hasil: SESUAI</>
+                  : <><AlertCircle size={18} /> Hasil: SELISIH</>}
                 <span className="result-id">{lastResult.inspection_id}</span>
               </div>
+
+              {/* Notifikasi Part Tidak Terdeteksi di Hasil Inspeksi */}
+              {lastResult.detected_qty === 0 && (
+                <div className="warning-banner" style={{
+                  background: '#fef3c7',
+                  borderBottom: '1px solid #fde68a',
+                  color: '#92400e',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  fontSize: '0.85rem',
+                  fontWeight: '600'
+                }}>
+                  <AlertTriangle size={18} style={{ color: '#d97706', flexShrink: 0 }} />
+                  <span>Peringatan: Roda gigi tidak terdeteksi! Pastikan part berada di dalam kotak pembingkai.</span>
+                </div>
+              )}
+
               <div className="result-grid">
                 <div className="result-item">
                   <span className="result-label">Expected</span>
@@ -927,18 +1354,18 @@ export default function Capture({ user }) {
               {/* Preview gambar hasil */}
               {lastResult.image_result_path && (
                 <div className="result-imgs">
-                  <div 
-                    className="result-img-wrap" 
-                    style={{ cursor: 'zoom-in' }} 
+                  <div
+                    className="result-img-wrap"
+                    style={{ cursor: 'zoom-in' }}
                     onClick={() => setZoomedImage({ url: `${API_BASE}${lastResult.image_path}`, title: 'Foto Raw (Asli)' })}
                     title="Klik untuk memperbesar"
                   >
                     <div className="result-img-label">Raw</div>
                     <img src={`${API_BASE}${lastResult.image_path}`} alt="raw" />
                   </div>
-                  <div 
-                    className="result-img-wrap" 
-                    style={{ cursor: 'zoom-in' }} 
+                  <div
+                    className="result-img-wrap"
+                    style={{ cursor: 'zoom-in' }}
                     onClick={() => setZoomedImage({ url: `${API_BASE}${lastResult.image_result_path}`, title: 'Hasil Deteksi AI' })}
                     title="Klik untuk memperbesar"
                   >
@@ -947,6 +1374,31 @@ export default function Capture({ user }) {
                   </div>
                 </div>
               )}
+
+              {/* Tombol Cetak Label QR */}
+              <div style={{ padding: '12px', borderTop: '1px solid var(--gray-200)', background: 'var(--gray-50)', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={handlePrintLabel}
+                  className="btn-cam"
+                  style={{
+                    background: '#10b981',
+                    color: '#ffffff',
+                    padding: '8px 16px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    width: 'auto',
+                    minWidth: 'auto'
+                  }}
+                >
+                  <Printer size={15} /> Cetak Label QR
+                </button>
+              </div>
             </div>
           )}
         </div>

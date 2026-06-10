@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Download } from 'lucide-react'
 import './Reports.css'
+import { parseUTCDate } from '../utils/date'
 
 const API_BASE = ""
 
@@ -39,7 +40,7 @@ export default function Reports() {
     
     let matchDate = true
     if (startDate || endDate) {
-      const rowDate = new Date(row.created_at).setHours(0,0,0,0)
+      const rowDate = parseUTCDate(row.created_at).setHours(0,0,0,0)
       const start = startDate ? new Date(startDate).setHours(0,0,0,0) : -Infinity
       const end = endDate ? new Date(endDate).setHours(23,59,59,999) : Infinity
       matchDate = rowDate >= start && rowDate <= end
@@ -54,7 +55,7 @@ export default function Reports() {
   const exportCSV = () => {
     const header = 'NO.;ID INSPEKSI;WAKTU;NAMA PART;BATCH ID;TARGET (EXPECTED);TERDETEKSI (DETECTED);SELISIH;STATUS;CONFIDENCE AI;FOTO ASLI;FOTO DETEKSI\n'
     const rows = filtered.map((r, index) => {
-      const timeStr = new Date(r.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
+      const timeStr = parseUTCDate(r.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
       const statusStr = r.is_match ? 'Sesuai' : 'Selisih'
       const confidenceStr = (r.average_confidence * 100).toFixed(1) + '%'
       
@@ -139,7 +140,7 @@ export default function Reports() {
     const accuracy = filtered.length > 0 ? ((matchCount / filtered.length) * 100).toFixed(1) : '0'
 
     const tableRowsHtml = filtered.map((r, index) => {
-      const timeStr = new Date(r.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
+      const timeStr = parseUTCDate(r.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
       const statusBadgeText = r.is_match ? 'Sesuai' : 'Selisih'
       
       const imgUrl = r.image_result_path ? `${API_BASE}${r.image_result_path}` : ''
@@ -584,7 +585,7 @@ export default function Reports() {
                 <tr key={row.id}>
                   <td style={{ color: '#6b7280' }}>{index + 1}</td>
                   <td className="td-mono">{row.inspection_id}</td>
-                  <td>{new Date(row.created_at).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })}</td>
+                  <td>{parseUTCDate(row.created_at).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })}</td>
                   <td>{row.part_name}</td>
                   <td>{row.expected_qty}</td>
                   <td>{row.detected_qty}</td>

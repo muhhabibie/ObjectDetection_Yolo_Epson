@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Kamera Pemindai EpsonQC</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+
+    #app-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Live Camera Feed ── */
+    #video-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      background: #090d16;
+    }
+
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: transparent !important;
+    }
+
+    /* ── Dark Overlay Vignette ── */
+    .viewport-overlay {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle, transparent 50%, rgba(15, 23, 42, 0.4) 100%);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* Target Framing Guide Box */
+    .frame-guide {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 260px;
+      height: 260px;
+      border: 3px dashed #ffffff;
+      border-radius: 24px;
+      z-index: 2;
+      pointer-events: none;
+      transition: all 0.3s ease;
+      filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.7));
+    }
+
+    .frame-guide::before, .frame-guide::after {
+      content: '';
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      border-color: rgba(255, 255, 255, 0.7);
+      border-style: solid;
+      border-width: 0;
+    }
+
+    /* Corner borders */
+    .frame-guide.active {
+      border: 3px solid #10b981;
+      background: rgba(16, 185, 129, 0.05);
+      box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);
+    }
+    
+    .frame-guide.scanning {
+      border: 3px solid #3b82f6;
+      background: rgba(59, 130, 246, 0.05);
+    }
+    
+    .frame-guide.processing {
+      border: 3px solid #8b5cf6;
+      background: rgba(139, 92, 246, 0.1);
+    }
+
+    /* ── Top Header Controls (Glassmorphism) ── */
+    header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      padding: 16px;
+      background: linear-gradient(to bottom, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0) 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      pointer-events: auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      background-color: #6366f1;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #6366f1;
+    }
+
+    .brand-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #f1f5f9;
+    }
+
+    /* Mode Selector Dropdown */
+    .selector-container {
+      display: flex;
+      gap: 8px;
+    }
+
+    select {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      padding: 6px 12px;
+      color: #f8fafc;
+      font-size: 0.78rem;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* ── Floating Status Badge ── */
+    #status-badge {
+      align-self: center;
+      background: rgba(107, 114, 128, 0.8);
+      backdrop-filter: blur(12px);
+      color: #ffffff;
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      pointer-events: auto;
+      transition: all 0.3s ease;
+    }
+
+    #status-badge.scanning {
+      background: rgba(59, 130, 246, 0.85);
+    }
+
+    #status-badge.detected {
+      background: rgba(16, 185, 129, 0.9);
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+
+    #status-badge.processing {
+      background: rgba(139, 92, 246, 0.9);
+      box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+    }
+
+    #status-badge.cooldown {
+      background: rgba(245, 158, 11, 0.85);
+    }
+
+    #status-badge.error {
+      background: rgba(239, 68, 68, 0.9);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ffffff;
+      animation: statusPulse 1.2s infinite;
+    }
+
+    @keyframes statusPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    /* ── Bottom Capture Bar ── */
+    .bottom-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      padding: 24px 20px 32px 20px;
+      background: linear-gradient(to top, rgba(15, 23, 42, 0.9) 30%, rgba(15, 23, 42, 0) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Trigger Settings Row (Interval & Auto Mode) */
+    .trigger-settings-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 340px;
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 10px 16px;
+    }
+
+    .setting-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    /* Switch toggle slider style */
+    .switch-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: #475569;
+      transition: .2s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .2s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    input:checked + .slider {
+      background-color: #10b981;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    /* Capture Action Buttons */
+    .actions-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .side-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(30, 41, 59, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #f8fafc;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .side-btn:active {
+      transform: scale(0.9);
+      background: rgba(255,255,255,0.1);
+    }
+
+    .side-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    /* Big Main Shutter Capture Button */
+    .shutter-btn-outer {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      border: 4px solid #ffffff;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .shutter-btn-inner {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #ffffff;
+      transition: all 0.2s ease;
+    }
+
+    .shutter-btn-outer:active {
+      transform: scale(0.92);
+    }
+
+    .shutter-btn-outer:active .shutter-btn-inner {
+      background: #e2e8f0;
+      transform: scale(0.95);
+    }
+    
+    .shutter-btn-outer.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+      border-color: #64748b;
+    }
+    
+    .shutter-btn-outer.disabled .shutter-btn-inner {
+      background: #64748b;
+    }
+
+    /* ── Counters / Info Floating ── */
+    .info-footer {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    
+    .counter-highlight {
+      color: #818cf8;
+      font-weight: 700;
+    }
+
+    /* Screen Flash Effect on Photo */
+    #flash-effect {
+      position: absolute;
+      inset: 0;
+      background: #ffffff;
+      opacity: 0;
+      z-index: 99;
+      pointer-events: none;
+    }
+
+    @keyframes flash {
+      0% { opacity: 0.85; }
+      100% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app-container">
+    <!-- Camera Viewport -->
+    <div id="video-container">
+      <video id="video-feed" autoplay playsinline webkit-playsinline muted></video>
+      <div class="viewport-overlay"></div>
+      <div id="frame-guide" class="frame-guide"></div>
+    </div>
+
+    <!-- Screen Flash -->
+    <div id="flash-effect"></div>
+
+    <!-- Top Header Panel -->
+    <header>
+      <div class="header-row">
+        <div class="brand">
+          <div class="brand-dot"></div>
+          <span class="brand-title">EpsonQC Cam</span>
+        </div>
+        <div class="selector-container">
+          <select id="camera-select" title="Pilih Lensa Kamera"></select>
+        </div>
+      </div>
+      
+      <!-- Status Badge -->
+      <div id="status-badge" class="idle">
+        <div class="pulse-dot"></div>
+        <span id="status-text">Kamera Siap</span>
+      </div>
+    </header>
+
+    <!-- Bottom Capture Controls -->
+    <div class="bottom-bar">
+      <!-- Trigger Settings Panel -->
+      <div class="trigger-settings-bar">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span class="setting-label" id="mode-display-label">Mode Auto: Deteksi Gear</span>
+          <span style="font-size: 0.65rem; color: #94a3b8;">Interval: <span id="interval-sec-val">1.5</span>s</span>
+        </div>
+        <div class="switch-container">
+          <select id="trigger-mode-select" style="padding: 4px 8px; border-radius: 12px; font-size: 0.7rem; border-color: rgba(255,255,255,0.05);">
+            <option value="gear_detection">Auto: Deteksi Gear</option>
+            <option value="interval">Auto: Jeda Waktu</option>
+          </select>
+          <label class="switch">
+            <input type="checkbox" id="auto-trigger-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Shutter Row -->
+      <div class="actions-row">
+        <!-- Left Accessory Button: Settings / Swap Mode -->
+        <button class="side-btn" id="btn-toggle-mode" title="Ubah Mode Auto">
+          <!-- Gear SVG icon -->
+          <svg viewBox="0 0 24 24">
+            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+          </svg>
+        </button>
+
+        <!-- Shutter Button -->
+        <div class="shutter-btn-outer" id="shutter-btn">
+          <div class="shutter-btn-inner"></div>
+        </div>
+
+        <!-- Right Accessory Button: Total Uploaded Counter -->
+        <div class="side-btn" style="cursor: default; font-weight: 700; font-size: 0.85rem;" id="upload-counter" title="Total Foto Terkirim">
+          0
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <span class="info-footer">Part Aktif Server: <span id="active-part-name" class="counter-highlight">Gear Roller</span></span>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin; // Otomatis mengarah ke host FastAPI
+    
+    // UI Elements
+    const video = document.getElementById('video-feed');
+    const cameraSelect = document.getElementById('camera-select');
+    const statusBadge = document.getElementById('status-badge');
+    const statusText = document.getElementById('status-text');
+    const frameGuide = document.getElementById('frame-guide');
+    const autoToggle = document.getElementById('auto-trigger-toggle');
+    const shutterBtn = document.getElementById('shutter-btn');
+    const uploadCounterEl = document.getElementById('upload-counter');
+    const activePartNameEl = document.getElementById('active-part-name');
+    const triggerModeSelect = document.getElementById('trigger-mode-select');
+    const modeDisplayLabel = document.getElementById('mode-display-label');
+    const intervalSecVal = document.getElementById('interval-sec-val');
+    const flashEffect = document.getElementById('flash-effect');
+    const btnToggleMode = document.getElementById('btn-toggle-mode');
+
+    // States
+    let currentStream = null;
+    let autoIntervalId = null;
+    let uploadCount = 0;
+    let cameraStatus = 'idle'; // idle | scanning | detected | processing | cooldown | error
+    let scanIntervalMs = 1500; 
+    let activePartName = "Gear Roller";
+    let wsStream = null;
+
+    // ── 1. Mengambil Active Settings dari Backend ──
+    async function fetchActiveSettings() {
+      try {
+        const res = await fetch(`${API_BASE}/api/active-settings`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.part_name) {
+            activePartName = data.part_name;
+            activePartNameEl.textContent = data.part_name;
+          }
+          intervalSecVal.textContent = (scanIntervalMs / 1000).toFixed(1);
+        }
+      } catch (err) {
+        console.error("Gagal mendapatkan parameter aktif server:", err);
+      }
+    }
+
+    // ── 2. WebSocket Real-time Live Video Streaming ──
+    function startLiveStreaming() {
+      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      // URL WebSocket disesuaikan dengan host dashboard/Vite (yang diproksi ke backend)
+      const wsUrl = `${wsProto}//${window.location.host}/ws/stream/phone`;
+      
+      console.log("Menghubungkan live stream ke: " + wsUrl);
+      wsStream = new WebSocket(wsUrl);
+      
+      wsStream.onopen = () => {
+        console.log("WebSocket live stream terhubung!");
+        streamLoop();
+      };
+      
+      wsStream.onclose = () => {
+        console.log("WebSocket live stream terputus. Mencoba menghubungkan kembali...");
+        wsStream = null;
+        setTimeout(startLiveStreaming, 2000);
+      };
+      
+      wsStream.onerror = (err) => {
+        console.error("WebSocket error:", err);
+      };
+    }
+
+    const canvasStream = document.createElement('canvas');
+    const ctxStream = canvasStream.getContext('2d');
+
+    function streamLoop() {
+      if (!wsStream || wsStream.readyState !== WebSocket.OPEN) return;
+      
+      // Perkecil ukuran frame agar streaming sangat ringan (480x320)
+      canvasStream.width = 480;
+      canvasStream.height = 320;
+      
+      // Gambar frame video ke canvas
+      ctxStream.drawImage(video, 0, 0, canvasStream.width, canvasStream.height);
+      
+      canvasStream.toBlob((blob) => {
+        if (blob && wsStream && wsStream.readyState === WebSocket.OPEN) {
+          blob.arrayBuffer().then(buffer => {
+            if (wsStream && wsStream.readyState === WebSocket.OPEN) {
+              wsStream.send(buffer);
+            }
+          });
+        }
+        // Kirim frame berikutnya (~12 FPS)
+        setTimeout(streamLoop, 80);
+      }, 'image/jpeg', 0.55); // Kualitas kompresi JPEG 55%
+    }
+
+    // ── 3. Konfigurasi MediaStream Kamera ──
+    async function startCamera(deviceId = null) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error("navigator.mediaDevices tidak didukung di browser ini.");
+        updateStatus('error', "Butuh HTTPS (Akses Kamera Diblokir)");
+        return;
+      }
+
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+
+      const constraints = {
+        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      };
+
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = currentStream;
+        
+        // Memastikan video berputar di mobile browser
+        try {
+          await video.play();
+        } catch (playErr) {
+          console.error("Gagal memutar video secara otomatis:", playErr);
+        }
+        
+        // Mulai live streaming langsung setelah kamera aktif
+        if (!wsStream) {
+          startLiveStreaming();
+        }
+        
+        // Dapatkan semua device kamera untuk selector
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        // Isi dropdown pilihan kamera jika kosong
+        if (cameraSelect.options.length === 0) {
+          videoDevices.forEach((device, index) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || `Lensa Kamera ${index + 1}`;
+            cameraSelect.appendChild(option);
+          });
+        }
+      } catch (err) {
+        console.error("Gagal mengakses kamera:", err);
+        let errorMsg = "Kamera Bermasalah";
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          errorMsg = "Izin Kamera Ditolak";
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          errorMsg = "Kamera Tidak Ditemukan";
+        } else {
+          errorMsg = `Eror: ${err.name || err.message}`;
+        }
+        updateStatus('error', errorMsg);
+      }
+    }
+
+    // ── 4. Update Status UI & Framing Animation ──
+    function updateStatus(state, message) {
+      cameraStatus = state;
+      statusBadge.className = state;
+      statusText.textContent = message;
+
+      // Update frame guide animation
+      frameGuide.className = 'frame-guide ' + state;
+
+      // Disable/enable shutter button
+      if (state === 'processing' || state === 'scanning' || state === 'cooldown') {
+        shutterBtn.classList.add('disabled');
+      } else {
+        shutterBtn.classList.remove('disabled');
+      }
+
+      // Memutar kembali video jika sempat ter-pause oleh browser saat cooldown/loading
+      if (state === 'idle' || state === 'scanning' || state === 'detected') {
+        if (video && video.paused) {
+          video.play().catch(e => console.log("Gagal memutar video di updateStatus:", e));
+        }
+      }
+    }
+
+    // Flash Screen animation
+    function triggerFlash() {
+      flashEffect.style.animation = 'none';
+      void flashEffect.offsetWidth; // trigger reflow
+      flashEffect.style.animation = 'flash 0.3s ease-out';
+    }
+
+    // ── 5. Ambil Frame & Konversi Ke Blob ──
+    function grabFrameBlob() {
+      const W_vid = video.videoWidth;
+      const H_vid = video.videoHeight;
+      const W_win = window.innerWidth;
+      const H_win = window.innerHeight;
+
+      if (!W_vid || !H_vid) {
+        // Fallback jika video belum termuat sempurna
+        const canvas = document.createElement('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+      }
+
+      // Hitung rasio & skala object-fit: cover
+      const R_win = W_win / H_win;
+      const R_vid = W_vid / H_vid;
+
+      let S, W_scaled, H_scaled;
+      if (R_win > R_vid) {
+        S = W_win / W_vid;
+      } else {
+        S = H_win / H_vid;
+      }
+      W_scaled = W_vid * S;
+      H_scaled = H_vid * S;
+
+      // Hitung margin offsets
+      const dx = (W_win - W_scaled) / 2;
+      const dy = (H_win - H_scaled) / 2;
+
+      // Dimensi & posisi kotak sasaran di layar (260px x 260px)
+      const boxSize = 260;
+      const X_box = (W_win - boxSize) / 2;
+      const Y_box = (H_win - boxSize) / 2;
+
+      // Konversi posisi kotak layar ke koordinat piksel video asli
+      const sx = (X_box - dx) / S;
+      const sy = (Y_box - dy) / S;
+      const sw = boxSize / S;
+      const sh = boxSize / S;
+
+      // Buat canvas berukuran persegi 640x640 (standard YOLOv8 input)
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 640;
+      const ctx = canvas.getContext('2d');
+      
+      // Menggambar bagian gambar yang dicrop saja ke canvas
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+      return new Promise(resolve => {
+        canvas.toBlob(resolve, 'image/jpeg', 0.8);
+      });
+    }
+
+    // ── Fungsi Pemulihan Kamera Mandiri ──
+    async function checkAndRestartCamera() {
+      const isTrackEnded = currentStream && currentStream.getVideoTracks().some(track => track.readyState === 'ended');
+      const isVideoPaused = video.paused;
+      
+      if (isVideoPaused || isTrackEnded || !currentStream) {
+        console.log("[camera] Mendeteksi kamera mati/terhenti setelah capture. Melakukan restart...");
+        await startCamera(cameraSelect.value || null);
+      }
+    }
+
+    // ── 6. Aksi Upload Manual (Sekali Foto) ──
+    async function captureAndUpload() {
+      if (cameraStatus === 'processing' || cameraStatus === 'cooldown') return;
+      
+      triggerFlash();
+      updateStatus('processing', "Mengirim ke AI...");
+
+      try {
+        const blob = await grabFrameBlob();
+        if (!blob) throw new Error("Gagal menangkap gambar dari sensor");
+
+        const form = new FormData();
+        form.append('file', blob, 'external_capture.jpg');
+
+        const res = await fetch(`${API_BASE}/api/upload-external/`, {
+          method: 'POST',
+          body: form
+        });
+
+        if (!res.ok) throw new Error('Respon server error');
+        
+        const data = await res.json();
+        
+        // Berhasil terkirim
+        uploadCount++;
+        uploadCounterEl.textContent = uploadCount;
+        
+        // Tampilkan hasil singkat
+        if (data.detected_qty === 0) {
+          updateStatus('error', "Peringatan: Roda gigi tidak terdeteksi!");
+        } else {
+          updateStatus('cooldown', `Terkirim! Terdeteksi: ${data.detected_qty} gear`);
+        }
+        
+        // Cooldown 3 detik sebelum siap kembali
+        setTimeout(async () => {
+          if (!autoToggle.checked) {
+            updateStatus('idle', "Kamera Siap");
+            await checkAndRestartCamera();
+          }
+        }, 3000);
+
+      } catch (err) {
+        console.error("Gagal mengupload gambar:", err);
+        updateStatus('error', "Gagal Mengunggah");
+        setTimeout(() => {
+          if (!autoToggle.checked) updateStatus('idle', "Kamera Siap");
+        }, 3000);
+      }
+    }
+
+    // ── 7. Loop Auto Trigger (Scanning & Uploading) ──
+    async function executeAutoStep() {
+      if (cameraStatus === 'processing' || cameraStatus === 'cooldown' || cameraStatus === 'scanning') return;
+
+      const triggerMode = triggerModeSelect.value;
+
+      try {
+        const blob = await grabFrameBlob();
+        if (!blob) return;
+
+        // A. Mode Deteksi Gear (Pre-scanning)
+        if (triggerMode === 'gear_detection') {
+          updateStatus('scanning', "Mendeteksi Gear...");
+          
+          const scanForm = new FormData();
+          scanForm.append('file', blob, 'scan_frame.jpg');
+
+          const scanRes = await fetch(`${API_BASE}/api/scan-frame-external/`, {
+            method: 'POST',
+            body: scanForm
+          });
+
+          if (!scanRes.ok) throw new Error("Gagal melakukan scan");
+          const scanData = await scanRes.json();
+
+          if (!scanData.detected) {
+            updateStatus('idle', "Standby (Mencari gear...)");
+            return; // Lanjutkan menunggu interval berikutnya
+          }
+
+          // Gear terdeteksi, lanjutkan ke upload permanen
+          updateStatus('detected', "Gear Terdeteksi!");
+          triggerFlash();
+          await new Promise(r => setTimeout(r, 400));
+        }
+
+        // B. Upload Gambar (Untuk simpan ke DB)
+        updateStatus('processing', "Menyimpan ke DB...");
+        
+        const form = new FormData();
+        form.append('file', blob, 'auto_capture.jpg');
+
+        const res = await fetch(`${API_BASE}/api/upload-external/`, {
+          method: 'POST',
+          body: form
+        });
+
+        if (!res.ok) throw new Error("Gagal mengunggah foto otomatis");
+        const data = await res.json();
+
+        uploadCount++;
+        uploadCounterEl.textContent = uploadCount;
+
+        // Masa Cooldown 3 detik setelah memproses
+        if (data.detected_qty === 0) {
+          updateStatus('error', "Peringatan: Roda gigi tidak terdeteksi!");
+        } else {
+          updateStatus('cooldown', `Terkirim! Terdeteksi ${data.detected_qty} gear`);
+        }
+        await new Promise(r => setTimeout(r, 3000));
+        
+        if (autoToggle.checked) {
+          updateStatus('idle', "Standby...");
+          await checkAndRestartCamera();
+        }
+
+      } catch (err) {
+        console.error("Gagal dalam proses auto trigger:", err);
+        updateStatus('error', "Error Auto Mode");
+        await new Promise(r => setTimeout(r, 3000));
+        if (autoToggle.checked) {
+          updateStatus('idle', "Standby...");
+          await checkAndRestartCamera();
+        }
+      }
+    }
+
+    // Toggle Auto Trigger loop
+    function toggleAutoTrigger(isActive) {
+      if (isActive) {
+        updateStatus('idle', "Standby...");
+        autoIntervalId = setInterval(executeAutoStep, scanIntervalMs);
+      } else {
+        if (autoIntervalId) {
+          clearInterval(autoIntervalId);
+          autoIntervalId = null;
+        }
+        updateStatus('idle', "Kamera Siap");
+      }
+    }
+
+    // Pilihan Kamera berubah
+    cameraSelect.addEventListener('change', (e) => {
+      startCamera(e.target.value);
+    });
+
+    // Tombol Shutter Manual
+    shutterBtn.addEventListener('click', () => {
+      if (cameraStatus !== 'processing' && cameraStatus !== 'cooldown' && !autoToggle.checked) {
+        captureAndUpload();
+      }
+    });
+
+    // Switch Auto Trigger diubah
+    autoToggle.addEventListener('change', (e) => {
+      toggleAutoTrigger(e.target.checked);
+    });
+
+    // Pilihan Mode Auto berubah
+    triggerModeSelect.addEventListener('change', (e) => {
+      if (e.target.value === 'gear_detection') {
+        modeDisplayLabel.textContent = "Mode Auto: Deteksi Gear";
+      } else {
+        modeDisplayLabel.textContent = "Mode Auto: Jeda Waktu";
+      }
+      
+      if (autoToggle.checked) {
+        toggleAutoTrigger(false);
+        toggleAutoTrigger(true);
+      }
+    });
+
+    // Tombol Aksesoris Gear (Ganti Interval Scan atau Mode)
+    btnToggleMode.addEventListener('click', () => {
+      const newInterval = prompt("Masukkan Jeda Waktu Scan baru (dalam Milidetik):\n(Contoh: 1500 untuk 1.5 detik)", scanIntervalMs);
+      if (newInterval !== null) {
+        const val = parseInt(newInterval);
+        if (!isNaN(val) && val >= 500) {
+          scanIntervalMs = val;
+          intervalSecVal.textContent = (scanIntervalMs / 1000).toFixed(1);
+          if (autoToggle.checked) {
+            toggleAutoTrigger(false);
+            toggleAutoTrigger(true);
+          }
+        } else {
+          alert("Interval waktu tidak valid. Minimal 500ms.");
+        }
+      }
+    });
+
+    // Inisialisasi saat window dimuat
+    window.addEventListener('load', async () => {
+      await fetchActiveSettings();
+      await startCamera();
+      
+      setInterval(fetchActiveSettings, 5000);
+
+      // Force play video pada sentuhan/klik pertama jika terhambat kebijakan autoplay
+      const playOnTouch = () => {
+        if (video && video.paused) {
+          video.play().then(() => {
+            console.log("Video berhasil diputar via interaksi pengguna.");
+          }).catch(err => {
+            console.error("Gagal memutar video via interaksi pengguna:", err);
+          });
+        }
+        document.removeEventListener('touchstart', playOnTouch);
+        document.removeEventListener('click', playOnTouch);
+      };
+      document.addEventListener('touchstart', playOnTouch);
+      document.addEventListener('click', playOnTouch);
+    });
+  </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Search, RefreshCw } from 'lucide-react'
 import './AuditLogs.css'
+import { parseUTCDate } from '../utils/date'
 
 const API_BASE = ""
 
@@ -59,7 +60,9 @@ export default function AuditLogs() {
       UPDATE_SETTINGS: 'log-action--settings',
       EDIT_INSPECTION: 'log-action--edit',
       DELETE_INSPECTION: 'log-action--delete',
-      CLEAR_HISTORY: 'log-action--clear'
+      CLEAR_HISTORY: 'log-action--clear',
+      AUTO_BACKUP: 'log-action--backup',
+      BACKUP_ERROR: 'log-action--backup-error'
     }
     return map[action] || 'log-action--default'
   }
@@ -115,7 +118,7 @@ export default function AuditLogs() {
               {filteredLogs.map((log, index) => (
                 <tr key={log.id}>
                   <td style={{ color: '#6b7280' }}>{index + 1}</td>
-                  <td>{new Date(log.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}</td>
+                  <td>{parseUTCDate(log.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}</td>
                   <td style={{ fontWeight: 600, color: '#334155' }}>{log.username || 'System'}</td>
                   <td>
                     <span className={`role-badge role-badge--${log.role}`}>

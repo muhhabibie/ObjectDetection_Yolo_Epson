@@ -3,7 +3,7 @@ import sys
 import asyncio
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -12,22 +12,23 @@ if sys.platform == "win32":
 
 from app.database import init_db
 from app.api import router
-from app.utils.watcher import folder_watcher_loop
+from app.utils.backup import backup_scheduler_loop
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    # Jalankan folder watcher di background
-    watcher_task = asyncio.create_task(folder_watcher_loop())
+    # Jalankan database backup scheduler di background
+    backup_task = asyncio.create_task(backup_scheduler_loop())
     try:
         yield
     finally:
-        watcher_task.cancel()
+        backup_task.cancel()
         try:
-            await watcher_task
+            await asyncio.gather(backup_task, return_exceptions=True)
         except asyncio.CancelledError:
             pass
+
 
 
 app = FastAPI(
@@ -64,6 +65,53 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 app.include_router(router)
+
+
+# ── WebSockets Live Stream Manager ──
+class StreamManager:
+    def __init__(self):
+        self.laptop_connections: list[WebSocket] = []
+
+    async def connect_laptop(self, websocket: WebSocket):
+        await websocket.accept()
+        self.laptop_connections.append(websocket)
+
+    def disconnect_laptop(self, websocket: WebSocket):
+        if websocket in self.laptop_connections:
+            self.laptop_connections.remove(websocket)
+
+    async def send_to_laptops(self, data: bytes):
+        for ws in self.laptop_connections:
+            try:
+                await ws.send_bytes(data)
+            except Exception:
+                pass
+
+stream_manager = StreamManager()
+
+
+@app.websocket("/ws/stream/laptop")
+async def ws_stream_laptop(websocket: WebSocket):
+    await stream_manager.connect_laptop(websocket)
+    try:
+        while True:
+            # Keep connection alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        stream_manager.disconnect_laptop(websocket)
+
+
+@app.websocket("/ws/stream/phone")
+async def ws_stream_phone(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            # Receive image frame from phone
+            data = await websocket.receive_bytes()
+            # Broadcast to all laptop screens
+            await stream_manager.send_to_laptops(data)
+    except WebSocketDisconnect:
+        pass
 
 
 @app.get("/api/network-ips")

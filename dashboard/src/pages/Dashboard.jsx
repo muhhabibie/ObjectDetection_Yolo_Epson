@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Eye, CheckCircle, TrendingDown, AlertTriangle } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import './Dashboard.css'
+import { parseUTCDate } from '../utils/date'
 
 const API_BASE = ""
 
@@ -166,7 +167,7 @@ export default function Dashboard() {
                   <tr key={row.id}>
                     <td style={{ color: '#6b7280' }}>{index + 1}</td>
                     <td className="td-mono">{row.inspection_id}</td>
-                    <td>{new Date(row.created_at).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })}</td>
+                    <td>{parseUTCDate(row.created_at).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })}</td>
                     <td>{row.part_name}</td>
                     <td>{row.expected_qty}</td>
                     <td>{row.detected_qty}</td>

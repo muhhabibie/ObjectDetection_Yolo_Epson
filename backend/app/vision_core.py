@@ -16,7 +16,7 @@ clahe = cv.createCLAHE(clipLimit=5.0, tileGridSize=(8, 8))
 print("[vision_core] Model siap!")
 
 
-def proses_inspeksi_gambar(file_bytes: bytes):
+def proses_inspeksi_gambar(file_bytes: bytes, conf: float = 0.5):
     """
     Menerima byte gambar, memproses dengan CLAHE & YOLOv8.
 
@@ -38,7 +38,7 @@ def proses_inspeksi_gambar(file_bytes: bytes):
     img_clahe = cv.cvtColor(merged_lab, cv.COLOR_LAB2BGR)
 
     # 3. Inferensi YOLOv8
-    results = model.predict(source=img_clahe, show=False, verbose=False)
+    results = model.predict(source=img_clahe, show=False, verbose=False, conf=conf)
     img_result = results[0].plot()  # gambar dengan bounding box
 
     # 4. Hitung kuantitas & confidence

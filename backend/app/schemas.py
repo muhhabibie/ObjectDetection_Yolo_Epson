@@ -46,15 +46,18 @@ class DashboardStats(BaseModel):
 class ActiveSettingsUpdate(BaseModel):
     part_name: str
     expected_qty: int
+    conf_threshold: Optional[float] = None
 
 class InspectionUpdate(BaseModel):
     part_name: Optional[str] = None
     expected_qty: Optional[int] = None
     batch_id: Optional[str] = None
 
+from uuid import UUID
+
 class AuditLogResponse(BaseModel):
     id: int
-    user_id: Optional[str] = None
+    user_id: Optional[UUID] = None
     username: Optional[str] = None
     role: Optional[str] = None
     action: str

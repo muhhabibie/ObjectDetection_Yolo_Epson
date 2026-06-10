@@ -73,3 +73,15 @@
   color: #475569;
   border: 1px solid #e2e8f0;
 }
+
+.log-action--backup {
+  background-color: #f0fdfa;
+  color: #0d9488;
+  border: 1px solid #ccfbf1;
+}
+
+.log-action--backup-error {
+  background-color: #fff5f5;
+  color: #e53e3e;
+  border: 1px solid #fed7d7;
+}

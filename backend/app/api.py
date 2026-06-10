@@ -76,7 +76,8 @@ async def log_activity(
 
 ACTIVE_SETTINGS = {
     "part_name": "Gear Roller",
-    "expected_qty": 12
+    "expected_qty": 12,
+    "conf_threshold": 0.50
 }
 
 
@@ -98,12 +99,15 @@ async def update_active_settings(
     
     ACTIVE_SETTINGS["part_name"] = settings.part_name
     ACTIVE_SETTINGS["expected_qty"] = settings.expected_qty
+    if settings.conf_threshold is not None:
+        ACTIVE_SETTINGS["conf_threshold"] = settings.conf_threshold
     
+    conf_str = f", threshold: {settings.conf_threshold}" if settings.conf_threshold is not None else ""
     await log_activity(
         db, 
         current_user, 
         "UPDATE_SETTINGS", 
-        f"Mengubah parameter active-settings ke: {settings.part_name} (target: {settings.expected_qty} gear)"
+        f"Mengubah parameter active-settings ke: {settings.part_name} (target: {settings.expected_qty} gear{conf_str})"
     )
     return ACTIVE_SETTINGS
 
@@ -138,8 +142,9 @@ async def scan_frame(
     cl = clahe.apply(l)
     img_clahe = cv.cvtColor(cv.merge((cl, a, b)), cv.COLOR_LAB2BGR)
 
+    conf = ACTIVE_SETTINGS.get("conf_threshold", 0.50)
     # Deteksi cepat
-    results = model.predict(source=img_clahe, show=False, verbose=False)
+    results = model.predict(source=img_clahe, show=False, verbose=False, conf=conf)
     count = len(results[0].boxes)
     confidence = 0.0
     if count > 0:
@@ -150,6 +155,47 @@ async def scan_frame(
         "count": count,
         "confidence": round(confidence, 1)
     }
+
+
+@router.post("/scan-frame-external/")
+async def scan_frame_external(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint ringan publik untuk auto-trigger kamera HP/eksternal.
+    Sama seperti scan-frame tetapi tidak memerlukan autentikasi.
+    """
+    import numpy as np
+    from app.vision_core import model, clahe
+
+    file_bytes = await file.read()
+    nparr = np.frombuffer(file_bytes, np.uint8)
+    img = cv.imdecode(nparr, cv.IMREAD_COLOR)
+
+    if img is None:
+        return {"detected": False, "count": 0, "confidence": 0.0}
+
+    # CLAHE preprocessing
+    lab = cv.cvtColor(img, cv.COLOR_BGR2LAB)
+    l, a, b = cv.split(lab)
+    cl = clahe.apply(l)
+    img_clahe = cv.cvtColor(cv.merge((cl, a, b)), cv.COLOR_LAB2BGR)
+
+    conf = ACTIVE_SETTINGS.get("conf_threshold", 0.50)
+    # Deteksi cepat
+    results = model.predict(source=img_clahe, show=False, verbose=False, conf=conf)
+    count = len(results[0].boxes)
+    confidence = 0.0
+    if count > 0:
+        confidence = float(results[0].boxes.conf.mean()) * 100
+
+    return {
+        "detected": count > 0,
+        "count": count,
+        "confidence": round(confidence, 1)
+    }
+
 
 # Path folder static untuk menyimpan gambar
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # backend/
@@ -222,13 +268,6 @@ async def create_inspection(
     db.add(db_insp)
     await db.commit()
     await db.refresh(db_insp)
-
-    await log_activity(
-        db,
-        current_user,
-        "CREATE_INSPECTION",
-        f"Membuat inspeksi baru {insp_id} untuk part {inspection.part_name}"
-    )
 
     return db_insp
 
@@ -390,7 +429,8 @@ async def upload_camera_image(
 
     # 2. Proses AI: CLAHE + YOLOv8
     try:
-        img_raw, img_result, detected_qty, avg_confidence = proses_inspeksi_gambar(file_bytes)
+        conf = ACTIVE_SETTINGS.get("conf_threshold", 0.50)
+        img_raw, img_result, detected_qty, avg_confidence = proses_inspeksi_gambar(file_bytes, conf=conf)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI processing error: {str(e)}")
 
@@ -432,14 +472,72 @@ async def upload_camera_image(
     await db.commit()
     await db.refresh(db_insp)
 
-    await log_activity(
-        db,
-        current_user,
-        "CAPTURE_IMAGE",
-        f"Berhasil mendeteksi {detected_qty} gear pada part {part_name} (ID: {insp_id})"
+    return db_insp
+
+
+@router.post("/upload-external/", response_model=InspectionResponse)
+async def upload_external_image(
+    file: UploadFile = File(...),
+    batch_id: str = Form(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Endpoint utama publik — menerima gambar dari kamera HP/eksternal, memproses dengan AI,
+    menyimpan dua gambar (raw + hasil deteksi), dan mencatat ke database menggunakan ACTIVE_SETTINGS.
+    """
+    from app.vision_core import proses_inspeksi_gambar
+
+    # 1. Baca konten file dari kamera
+    file_bytes = await file.read()
+    start_time = time.time()
+
+    # 2. Proses AI: CLAHE + YOLOv8
+    try:
+        conf = ACTIVE_SETTINGS.get("conf_threshold", 0.50)
+        img_raw, img_result, detected_qty, avg_confidence = proses_inspeksi_gambar(file_bytes, conf=conf)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI processing error: {str(e)}")
+
+    processing_time = round(time.time() - start_time, 3)
+
+    # 3. Generate nama file unik
+    file_id = str(uuid.uuid4())
+    filename = f"{file_id}.jpg"
+
+    # 4. Simpan gambar RAW
+    raw_filepath = os.path.join(STATIC_RAW_DIR, filename)
+    cv.imwrite(raw_filepath, img_raw)
+
+    # 5. Simpan gambar RESULT (dengan bounding box deteksi)
+    res_filepath = os.path.join(STATIC_RES_DIR, filename)
+    cv.imwrite(res_filepath, img_result)
+
+    # 6. URL path untuk diakses frontend
+    image_path = f"/static/images/raw/{filename}"
+    image_result_path = f"/static/images/result/{filename}"
+
+    # 7. Simpan ke database menggunakan ACTIVE_SETTINGS
+    insp_id = f"INS-{random.randint(10000, 99999)}"
+    db_insp = Inspection(
+        inspection_id=insp_id,
+        part_name=ACTIVE_SETTINGS["part_name"],
+        batch_id=batch_id,
+        expected_qty=ACTIVE_SETTINGS["expected_qty"],
+        detected_qty=detected_qty,
+        discrepancy=detected_qty - ACTIVE_SETTINGS["expected_qty"],
+        is_match=detected_qty == ACTIVE_SETTINGS["expected_qty"],
+        average_confidence=round(avg_confidence / 100, 4),
+        image_path=image_path,
+        image_result_path=image_result_path,
+        processing_time_sec=processing_time
     )
 
+    db.add(db_insp)
+    await db.commit()
+    await db.refresh(db_insp)
+
     return db_insp
+
 
 
 @router.put("/inspections/{id}", response_model=InspectionResponse)
